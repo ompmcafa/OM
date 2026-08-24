@@ -595,24 +595,20 @@ function buildRoomsForBlock(block){
   return rooms;
 }
 
-function seedDefaultBlocksAndRooms(){
-  const blocks = defaultBlocks();
-  let rooms = [];
-  blocks.forEach(b => { rooms = rooms.concat(buildRoomsForBlock(b)); });
-  return { blocks, rooms };
-}
-
 /* =========================================================================
    FIRESTORE SYNC
    DB starts empty and is populated entirely from real-time Firestore
    listeners once signed in. Each collection listener replaces its slice of
    DB wholesale with the latest server state, so writes from any
    signed-in device (including this one) show up everywhere automatically.
-   ========================================================================= */
+   The app itself never auto-creates default data — blocks/rooms are
+   loaded once via the standalone seed-tool.html, then managed from here
+   on via the normal Admin screen (add room / add block). This avoids the
+   race condition where two devices opening the app at the same moment
+   could each decide the database looked empty and both try to seed it. */
 let DB = { blocks: [], rooms: [], bookings: [], auditLog: [], housekeeping: {}, meta: {} };
 const dataLoaded = { blocks: false, rooms: false, bookings: false };
 let firestoreSyncStarted = false;
-let seedInFlight = false;
 
 function allCoreDataLoaded(){ return dataLoaded.blocks && dataLoaded.rooms && dataLoaded.bookings; }
 
@@ -623,13 +619,11 @@ function startFirestoreSync(){
   window.fsOnSnapshot('blocks', (arr) => {
     DB.blocks = arr.slice().sort((a,b)=>(a.order||0)-(b.order||0));
     dataLoaded.blocks = true;
-    maybeSeedDefaults();
     onFirestoreDataChanged();
   });
   window.fsOnSnapshot('rooms', (arr) => {
     DB.rooms = arr;
     dataLoaded.rooms = true;
-    maybeSeedDefaults();
     onFirestoreDataChanged();
   });
   window.fsOnSnapshot('bookings', (arr) => {
@@ -648,28 +642,6 @@ function onFirestoreDataChanged(){
     if(loadingScreen) loadingScreen.classList.add('hidden');
   }
   render();
-}
-/* Tops up any missing default blocks/rooms in Firestore. Because room IDs
-   are now deterministic (see buildRoomsForBlock), writing the same room
-   twice just overwrites the same doc — so this check is safe to run every
-   time the blocks/rooms snapshots update, and will automatically finish
-   an interrupted seed (e.g. the page was closed mid-write) rather than
-   leaving a partial set of rooms forever. Once nothing is missing it's a
-   cheap no-op on every subsequent check. */
-function maybeSeedDefaults(){
-  if(!dataLoaded.blocks || !dataLoaded.rooms) return; // wait for both to report in at least once
-  if(seedInFlight) return;
-  const { blocks, rooms } = seedDefaultBlocksAndRooms();
-  const existingBlockIds = new Set(DB.blocks.map(b=>b.id));
-  const existingRoomIds = new Set(DB.rooms.map(r=>r.id));
-  const missingBlocks = blocks.filter(b=>!existingBlockIds.has(b.id));
-  const missingRooms = rooms.filter(r=>!existingRoomIds.has(r.id));
-  if(missingBlocks.length===0 && missingRooms.length===0) return;
-  seedInFlight = true;
-  Promise.all([...missingBlocks.map(persistBlock), ...missingRooms.map(persistRoom)])
-    .then(() => console.info(`Seed check: added ${missingBlocks.length} block(s), ${missingRooms.length} room(s).`))
-    .catch(err => console.error('Seeding Firestore failed', err))
-    .finally(() => { seedInFlight = false; });
 }
 
 /* Per-entity Firestore writes. Each object already carries its own "id"
@@ -1017,11 +989,6 @@ function goToMovement(filter){
   state.movementFilter = filter;
   render(); window.scrollTo({top:0});
 }
-function onVipTileClick(roomId){
-  const b = bookingOnDate(roomId, todayISO());
-  if(b) openDetailModal(b.id);
-  else openBookingModal(roomId, todayISO());
-}
 
 function renderDashboard(){
   const rooms = activeRooms();
@@ -1058,20 +1025,6 @@ function renderDashboard(){
         </div>
         <div class="w-12 shrink-0 text-right text-xs font-mono-num text-mess-600">${bOcc}/${bRooms.length}</div>
         <span class="text-mess-300 text-sm shrink-0">&rsaquo;</span>
-      </button>`;
-  }).join('');
-
-  const vipBlock = getBlock('vip');
-  const vipRooms = vipBlock ? roomsForBlock('vip') : [];
-  const vipStrip = vipRooms.map(r=>{
-    const booking = bookingOnDate(r.id, today);
-    const dot = booking ? 'bg-status-vip' : 'bg-mess-200';
-    const label = booking ? 'Occupied' : 'Free';
-    return `
-      <button onclick="onVipTileClick('${r.id}')" class="flex-1 bg-white rounded-xl border border-mess-100 px-2.5 py-2 text-center active:opacity-60">
-        <div class="w-2.5 h-2.5 rounded-full ${dot} mx-auto mb-1"></div>
-        <div class="text-[11px] font-semibold text-mess-800 truncate">${r.name}</div>
-        <div class="text-[10px] text-mess-500">${label}</div>
       </button>`;
   }).join('');
 
@@ -1113,13 +1066,6 @@ function renderDashboard(){
       <button onclick="setTab('movement')" class="bg-white border border-mess-200 text-mess-800 rounded-xl py-3 text-sm font-semibold flex items-center justify-center gap-2">
         Movement sheet
       </button>
-    </div>
-
-    <div>
-      <div class="flex items-center justify-between mb-2">
-        <div class="font-display uppercase text-xs font-semibold text-mess-600 tracking-wide">VIP Suites today</div>
-      </div>
-      <div class="flex gap-2">${vipStrip}</div>
     </div>
 
     <div class="bg-white rounded-2xl border border-mess-100 p-4">
