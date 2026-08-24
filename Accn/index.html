@@ -563,11 +563,12 @@ function formatTimeHrs(t, fallback){
 }
 
 function defaultBlocks(){
+  /* Display order: VIP Suites, then Sadanand Block, Naidu Block, AFFWA Block. */
   return [
-    { id:'sadanand', name:'Sadanand Block', prefix:'SB', count:45, vip:false, active:true, order:1 },
-    { id:'naidu',    name:'Naidu Block',    prefix:'NB', count:34, vip:false, active:true, order:2 },
-    { id:'affwa',    name:'AFFWA Block',    prefix:'AF', count:4,  vip:false, active:true, order:3 },
-    { id:'vip',      name:'VIP Suites',     prefix:'VIP',count:4,  vip:true,  active:true, order:4 },
+    { id:'vip',      name:'VIP Suites',     prefix:'VIP',count:4,  vip:true,  active:true, order:1 },
+    { id:'sadanand', name:'Sadanand Block', prefix:'SB', count:45, vip:false, active:true, order:2 },
+    { id:'naidu',    name:'Naidu Block',    prefix:'NB', count:34, vip:false, active:true, order:3 },
+    { id:'affwa',    name:'AFFWA Block',    prefix:'AF', count:4,  vip:false, active:true, order:4 },
   ];
 }
 const VIP_NAMES = ['Rashtrakoot','Kakatiya','Vijaynagara','Satavahana'];
@@ -576,11 +577,17 @@ const VIP_NAMES = ['Rashtrakoot','Kakatiya','Vijaynagara','Satavahana'];
 const ROOM_TYPES = { vip: 'VIP Suite', td: 'TD Room', livingin: 'Living-in Room' };
 const ROOM_STATUSES = { available: 'Available for booking', maintenance: 'On Maintenance' };
 
+/* Room IDs are deterministic (blockId + room index) rather than random —
+   this makes seeding/top-up idempotent: writing the same room twice just
+   overwrites the same Firestore doc instead of creating a duplicate, so an
+   interrupted seed (e.g. page closed mid-write) can always resume safely
+   on next load without leaving gaps or dupes. Rooms added later by hand
+   via Admin still get a random uid() as usual. */
 function buildRoomsForBlock(block){
   const rooms = [];
   for(let i=1;i<=block.count;i++){
     rooms.push({
-      id: uid('room'), blockId: block.id, roomNo: String(i),
+      id: block.id + '-r' + i, blockId: block.id, roomNo: String(i),
       name: block.vip ? (VIP_NAMES[i-1] || null) : null,
       type: block.vip ? 'vip' : 'td', status: 'available',
     });
@@ -605,7 +612,7 @@ function seedDefaultBlocksAndRooms(){
 let DB = { blocks: [], rooms: [], bookings: [], auditLog: [], housekeeping: {}, meta: {} };
 const dataLoaded = { blocks: false, rooms: false, bookings: false };
 let firestoreSyncStarted = false;
-let seedAttempted = false;
+let seedInFlight = false;
 
 function allCoreDataLoaded(){ return dataLoaded.blocks && dataLoaded.rooms && dataLoaded.bookings; }
 
@@ -622,6 +629,7 @@ function startFirestoreSync(){
   window.fsOnSnapshot('rooms', (arr) => {
     DB.rooms = arr;
     dataLoaded.rooms = true;
+    maybeSeedDefaults();
     onFirestoreDataChanged();
   });
   window.fsOnSnapshot('bookings', (arr) => {
@@ -641,17 +649,27 @@ function onFirestoreDataChanged(){
   }
   render();
 }
-/* Runs once, the first time the blocks collection is confirmed empty —
-   i.e. a brand-new Firestore database — and seeds the default blocks and
-   rooms into it so the app has something to book against. On an existing
-   database with data already in it, this never fires. */
+/* Tops up any missing default blocks/rooms in Firestore. Because room IDs
+   are now deterministic (see buildRoomsForBlock), writing the same room
+   twice just overwrites the same doc — so this check is safe to run every
+   time the blocks/rooms snapshots update, and will automatically finish
+   an interrupted seed (e.g. the page was closed mid-write) rather than
+   leaving a partial set of rooms forever. Once nothing is missing it's a
+   cheap no-op on every subsequent check. */
 function maybeSeedDefaults(){
-  if(seedAttempted || DB.blocks.length > 0) return;
-  seedAttempted = true;
+  if(!dataLoaded.blocks || !dataLoaded.rooms) return; // wait for both to report in at least once
+  if(seedInFlight) return;
   const { blocks, rooms } = seedDefaultBlocksAndRooms();
-  Promise.all([...blocks.map(persistBlock), ...rooms.map(persistRoom)])
-    .then(() => console.info('Seeded default blocks & rooms into Firestore.'))
-    .catch(err => { console.error('Seeding Firestore failed', err); seedAttempted = false; });
+  const existingBlockIds = new Set(DB.blocks.map(b=>b.id));
+  const existingRoomIds = new Set(DB.rooms.map(r=>r.id));
+  const missingBlocks = blocks.filter(b=>!existingBlockIds.has(b.id));
+  const missingRooms = rooms.filter(r=>!existingRoomIds.has(r.id));
+  if(missingBlocks.length===0 && missingRooms.length===0) return;
+  seedInFlight = true;
+  Promise.all([...missingBlocks.map(persistBlock), ...missingRooms.map(persistRoom)])
+    .then(() => console.info(`Seed check: added ${missingBlocks.length} block(s), ${missingRooms.length} room(s).`))
+    .catch(err => console.error('Seeding Firestore failed', err))
+    .finally(() => { seedInFlight = false; });
 }
 
 /* Per-entity Firestore writes. Each object already carries its own "id"
@@ -749,7 +767,15 @@ function roomFullNumber(room){
 }
 function roomLabel(room){ if(!room) return '—'; return room.type==='vip' ? (room.name + ' (' + roomFullNumber(room) + ')') : roomFullNumber(room); }
 function activeRooms(){ return DB.rooms; }
-function roomsForBlock(blockId){ return DB.rooms.filter(r=>r.blockId===blockId); }
+/* Firestore doesn't preserve insertion order the way the old localStorage
+   array did, so room order within a block must be sorted explicitly here
+   rather than relying on array/document order — this is the one place
+   nearly every room listing (Gantt, Admin, the booking room picker) goes
+   through, so fixing it here fixes room ordering everywhere. */
+function roomsForBlock(blockId){
+  return DB.rooms.filter(r=>r.blockId===blockId)
+    .sort((a,b)=> (parseInt(a.roomNo,10)||0) - (parseInt(b.roomNo,10)||0));
+}
 function isAdmin(role){ return ADMIN_ROLES.includes(role); }
 
 function bookingsOnDate(roomId, dateISO){
