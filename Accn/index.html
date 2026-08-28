@@ -61,15 +61,30 @@
   }
 </script>
 <style>
-  html, body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
-  body { font-family: 'Inter', sans-serif; background:#f5f7fb; }
+  html, body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; height: 100%; }
+  body { font-family: 'Inter', sans-serif; background:#f5f7fb; margin: 0; }
+
+  /* ===================== APP SHELL HEIGHT =====================
+     #app is a fixed-viewport-height flex column (header, then the
+     sidebar+content row filling everything else — see the markup).
+     This is what makes #app-content (and, inside the Gantt tab, the
+     grid itself) genuinely SCROLL, rather than the whole page scrolling
+     — which in turn is what makes position:sticky headers actually
+     freeze during a vertical scroll instead of just scrolling away.
+     100dvh is preferred (accounts for mobile browser/PWA chrome that
+     shows/hides on scroll); browsers without dvh support silently keep
+     the 100vh rule above it, since an unsupported value is dropped. */
+  #app { height: 100vh; }
+  @supports (height: 100dvh) { #app { height: 100dvh; } }
+
   /* On tablet/laptop the app widens into a centered "card" (see #app's
      lg:max-w-6xl) rather than stretching edge-to-edge — this backdrop gives
      that card something to sit on so wide viewports don't just look like a
      mobile layout with wasted margins. */
   @media (min-width: 1024px) {
     body { background: linear-gradient(180deg, #e7edf8 0%, #eef1f7 340px, #eef1f7 100%); }
-    #app { border-radius: 20px; overflow: hidden; margin-top: 20px; margin-bottom: 20px; min-height: calc(100vh - 40px); box-shadow: 0 20px 50px -20px rgba(12,31,66,0.35); }
+    #app { border-radius: 20px; margin-top: 20px; margin-bottom: 20px; height: calc(100vh - 40px); box-shadow: 0 20px 50px -20px rgba(12,31,66,0.35); }
+    @supports (height: 100dvh) { #app { height: calc(100dvh - 40px); } }
     #app > header.safe-top { padding-top: 0; }
   }
   .font-display { font-family: 'Oswald', sans-serif; }
@@ -134,12 +149,14 @@
   </div>
 </div>
 
-<div id="app" class="min-h-screen flex flex-col max-w-2xl md:max-w-3xl lg:max-w-6xl mx-auto bg-[#f5f7fb] relative">
+<div id="app" class="flex flex-col max-w-2xl md:max-w-3xl lg:max-w-6xl mx-auto bg-[#f5f7fb] relative overflow-hidden">
 
   <!-- ===================== TOP BAR =====================
        Full-width across every breakpoint; the role switcher and wordmark
-       stay put, only the surrounding app frame widens on tablet/desktop. -->
-  <header class="safe-top sticky top-0 z-40 bg-mess-800 text-white shadow-md">
+       stay put, only the surrounding app frame widens on tablet/desktop.
+       No longer needs "sticky" — it's a fixed-height flex item at the top
+       of the app shell (see #app's height in <style>), it never scrolls. -->
+  <header class="safe-top shrink-0 z-40 bg-mess-800 text-white shadow-md">
     <div class="flex items-center justify-between px-4 lg:px-6 pt-3 pb-2 lg:py-3">
       <div class="flex items-center gap-2">
         <div class="w-8 h-8 rounded-full bg-brass-500 flex items-center justify-center font-display font-bold text-white text-sm">AM</div>
@@ -156,14 +173,21 @@
   </header>
 
   <!-- ===================== BODY: SIDEBAR (lg+) + MAIN CONTENT =====================
+       This row fills all remaining height below the header (flex-1 min-h-0
+       inside the fixed-height #app shell). #app-content is the ONE real
+       scrolling region for most tabs; the Gantt tab additionally splits
+       itself into its own fixed-header + scrolling-body layout inside that
+       region (see renderGantt) so headers can freeze on vertical scroll
+       too, the same way the room-name column already freezes on
+       horizontal scroll.
        Below the laptop breakpoint this is just the content column with a
        bottom tab bar (mobile/tablet app pattern). At lg+ the bottom bar
        hides and a persistent left sidebar takes over — the desktop-app
        pattern, so the wide viewport gets used for navigation instead of
        stretched-out empty margins. -->
-  <div class="flex-1 flex lg:items-stretch">
-    <nav id="sidebarNav" class="hidden lg:flex flex-col w-56 shrink-0 border-r border-mess-100 bg-white py-4 px-3 sticky top-[65px] self-start" style="height:calc(100vh - 65px)"></nav>
-    <main id="app-content" class="flex-1 min-w-0 pb-24 lg:pb-8"></main>
+  <div class="flex-1 flex min-h-0 lg:items-stretch">
+    <nav id="sidebarNav" class="hidden lg:flex flex-col w-56 shrink-0 border-r border-mess-100 bg-white py-4 px-3 overflow-y-auto"></nav>
+    <main id="app-content" class="flex-1 min-w-0 min-h-0 overflow-y-auto pb-24 lg:pb-8"></main>
   </div>
 
   <!-- ===================== BOTTOM NAV (mobile / tablet) ===================== -->
@@ -212,6 +236,8 @@
           <label class="text-xs font-medium text-mess-600">Purpose of visit</label>
           <select id="f_category" required class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white">
             <option value="TD">Temporary Duty (TD)</option>
+            <option value="PostingIn">Posting-in</option>
+            <option value="PostedOut">Posted-out</option>
             <option value="Leave">Leave</option>
             <option value="LivingIn">Living-in</option>
             <option value="OfficialGuest">Official Guest</option>
@@ -542,6 +568,8 @@ window.onAuthStateChangedHandler = function(user){
 };
 const CATEGORY_META = {
   TD:            { label: 'TD',                    color: '#0891B2', bg: '#E3F5F8' },
+  PostingIn:     { label: 'Posting-in',             color: '#2563EB', bg: '#E8EFFD' },
+  PostedOut:     { label: 'Posted-out',             color: '#0F766E', bg: '#E1F3F0' },
   Leave:         { label: 'Leave',                  color: '#3F9A63', bg: '#EAF6EF' },
   LivingIn:      { label: 'Living-in',              color: '#7C5CBF', bg: '#EFEAFB' },
   OfficialGuest: { label: 'Official Guest',         color: '#D9932A', bg: '#FBF1E1' },
@@ -549,7 +577,7 @@ const CATEGORY_META = {
   VIP:           { label: 'VIP Suite',              color: '#B3542E', bg: '#FBEAE3' },
 };
 const CATEGORY_SHORT = {
-  TD: 'T/D', Leave: 'Leave', LivingIn: 'Living-in',
+  TD: 'T/D', PostingIn: 'Posting-in', PostedOut: 'Posted-out', Leave: 'Leave', LivingIn: 'Living-in',
   OfficialGuest: 'Official Guest', GuestFamily: 'Guest/Family/Self', VIP: 'VIP',
 };
 /* Booking record status — every booking (including VIP suites) is
@@ -988,11 +1016,18 @@ function renderChrome(){
       </div>`;
   }
 }
+/* Now that #app-content (not the page) is the real scrolling region — see
+   the fixed-height app shell in <style> — resetting scroll position on tab
+   change means resetting #app-content's own scrollTop, not window scroll. */
+function scrollContentToTop(){
+  const c = document.getElementById('app-content');
+  if(c) c.scrollTop = 0;
+}
 function setTab(id){
   state.tab = id;
   if(id==='gantt') resetGanttWindow();
   render();
-  window.scrollTo({top:0});
+  scrollContentToTop();
 }
 
 /* =========================================================================
@@ -1035,7 +1070,7 @@ function goToBlockGantt(blockId){
   state.ganttSearch = '';
   DB.blocks.forEach(b => { state.collapsed[b.id] = (b.id !== blockId); });
   resetGanttWindow();
-  render(); window.scrollTo({top:0});
+  render(); scrollContentToTop();
 }
 /* catKey may be a Purpose-of-visit key (from the dashboard breakdown) or
    'occupied' (from the occupancy ring) — mapped to the closest Room Type
@@ -1048,12 +1083,12 @@ function goToCategoryGantt(catKey){
   state.ganttSearch = '';
   state.collapsed = {};
   resetGanttWindow();
-  render(); window.scrollTo({top:0});
+  render(); scrollContentToTop();
 }
 function goToMovement(filter){
   state.tab = 'movement';
   state.movementFilter = filter;
-  render(); window.scrollTo({top:0});
+  render(); scrollContentToTop();
 }
 
 function renderDashboard(){
@@ -1141,7 +1176,7 @@ function renderDashboard(){
 
     <div>
       <div class="font-display uppercase text-xs font-semibold text-mess-600 tracking-wide mb-2">Occupants by purpose of visit</div>
-      <div class="grid grid-cols-2 lg:grid-cols-1 gap-2">${catList}</div>
+      <div class="grid grid-cols-2 lg:grid-cols-2 gap-2">${catList}</div>
     </div>
 
   </div>`;
@@ -1350,7 +1385,8 @@ function renderGantt(){
   }).join('');
 
   return `
-  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
+  <div class="flex flex-col h-full">
+  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-2 shrink-0">
     <div class="flex items-center gap-2 mb-3">
       <div class="relative flex-1 min-w-0">
         <input type="text" oninput="onGanttSearch(this.value)" value="${state.ganttSearch}" placeholder="Search room, name, remarks, contact..."
@@ -1386,11 +1422,12 @@ function renderGantt(){
       ` : ''}
     </div>
   </div>
-  <div id="ganttScroll" class="overflow-x-auto border-t border-mess-200 bg-white mx-0">
+  <div id="ganttScroll" class="flex-1 min-h-0 overflow-auto border-t border-mess-200 bg-white mx-0">
     <div style="width:${96+dates.length*CELL_W}px">
       ${renderDateRow(dates, today)}
       ${blockSections || '<div class="p-6 text-center text-sm text-mess-400">No rooms match your search.</div>'}
     </div>
+  </div>
   </div>`;
 }
 function onGanttSearch(v){ state.ganttSearch = v; render(); const el=document.querySelector('#app-content input[type=text]'); if(el){ el.focus(); el.selectionStart = el.selectionEnd = el.value.length; } }
