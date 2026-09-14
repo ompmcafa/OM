@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body { -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Inter', sans-serif; margin: 0; }
+.font-display { font-family: 'Oswald', sans-serif; }
+.font-mono-num { font-family: 'JetBrains Mono', monospace; }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-top { padding-top: env(safe-area-inset-top); }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.3); }
+fieldset:disabled, input:disabled, select:disabled { cursor: not-allowed; }
+
+/* Staff app shell */
+body.staff-app { overscroll-behavior-y: contain; height: 100%; background: #f5f7fb; }
+body.staff-app #app { height: 100vh; }
+@supports (height: 100dvh) {
+  body.staff-app #app { height: 100dvh; }
+}
+@media (min-width: 1024px) {
+  body.staff-app { background: linear-gradient(180deg, #e7edf8 0%, #eef1f7 340px, #eef1f7 100%); }
+  body.staff-app #app { border-radius: 20px; margin-top: 20px; margin-bottom: 20px; height: calc(100vh - 40px); box-shadow: 0 20px 50px -20px rgba(12,31,66,0.35); }
+  @supports (height: 100dvh) {
+    body.staff-app #app { height: calc(100dvh - 40px); }
+  }
+  body.staff-app #app > header.safe-top { padding-top: 0; }
+}
+body.staff-app ::-webkit-scrollbar { height: 6px; width: 6px; }
+body.staff-app ::-webkit-scrollbar-thumb { background: #b0c7ec; border-radius: 4px; }
+.gantt-cell { min-width: 40px; }
+.gantt-name-col { position: sticky; left: 0; z-index: 6; }
+.modal-backdrop { backdrop-filter: blur(2px); }
+@keyframes toastIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform: translateY(0);} }
+.toast-anim { animation: toastIn .18s ease-out; }
+.tab-active { color: #122d5e; }
+.tab-inactive { color: #9aa7bd; }
+.ring-track { transition: stroke-dashoffset .6s ease; }
+.accordion-open .chev { transform: rotate(90deg); }
+.scrollbar-none::-webkit-scrollbar{ display:none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Guest portal */
+body.guest-app { background: #F6F2E9; color: #122d5e; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin:0; }
+input[type="number"] { -moz-appearance: textfield; }
+@keyframes popIn { from { opacity:0; transform: scale(0.85); } to { opacity:1; transform: scale(1); } }
+.pop-in { animation: popIn .35s cubic-bezier(.2,.8,.3,1.1); }
+@media (prefers-reduced-motion: reduce) {
+  .pop-in { animation: none; }
+  .toast-anim { animation: none; }
+}
+.stepper-btn { width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:600; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #2f5fb8; outline-offset: 2px;
+}
+.field-error { border-color:#C0392B !important; }
+.field-error-msg { color:#C0392B; font-size:11px; margin-top:4px; }
+
+#connBanner { display: none; }
+#connBanner.is-on { display: block; }
