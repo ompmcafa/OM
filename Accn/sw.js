@@ -1,13 +1,14 @@
-/* Accomodation Manager — minimal service worker.
+/* Accommodation Manager — minimal service worker.
    Purpose: satisfy PWA installability (so "Add to Home Screen" gives a real
    standalone app icon + splash instead of a browser bookmark) and cache the
    static app shell for a fast, resilient launch. It deliberately does NOT
    cache Firestore/Firebase network calls — booking data always comes from
    the network so the app never shows stale room/booking state. */
-const SHELL_CACHE = 'am-shell-v1';
+const SHELL_CACHE = 'am-shell-v4';
 const SHELL_FILES = [
   './',
   './index.html',
+  './css/app.css',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',

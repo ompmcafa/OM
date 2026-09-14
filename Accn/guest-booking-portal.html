@@ -3,71 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
-<title>Request a Booking &middot; Officers Mess, AFA</title>
+<title>Accommodation &middot; Officers Mess, AFA</title>
 <meta name="description" content="Request accommodation or check the status of your booking request at Officers Mess, Air Force Academy.">
 <meta name="theme-color" content="#122d5e">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        fontFamily: {
-          display: ['Oswald', 'sans-serif'],
-          body: ['Inter', 'sans-serif'],
-          mono: ['JetBrains Mono', 'monospace'],
-        },
-        colors: {
-          /* Same navy family as the staff app, so this page reads as part of
-             the same institution — but "brass" here is an actual warm gold,
-             not the blue used for "brass" in the admin app's token names.
-             This page is the reception desk, not the ops room: warmer,
-             lighter, fewer controls per screen. */
-          mess: {
-            50:  '#eef3fb', 100: '#d7e3f5', 200: '#b0c7ec', 300: '#7fa3de', 400: '#4d7dce',
-            500: '#2f5fb8', 600: '#1f4694', 700: '#173a7a', 800: '#122d5e', 900: '#0c1f42',
-          },
-          gold: {
-            50:  '#faf5ea', 100: '#f3e8cc', 200: '#e6cf99', 300: '#d3ac5c',
-            400: '#bd8f3c', 500: '#a9762f', 600: '#8c6026', 700: '#6f4c1f',
-          },
-          status: {
-            pending:  '#A9762F',
-            approved: '#3F9A63',
-            rejected: '#C0392B',
-            cancelled:'#7A8699',
-          }
-        }
-      }
-    }
-  }
-</script>
-<style>
-  html, body { -webkit-tap-highlight-color: transparent; }
-  body { font-family: 'Inter', sans-serif; background:#F6F2E9; margin:0; color:#122d5e; }
-  .font-display { font-family: 'Oswald', sans-serif; }
-  .font-mono-num { font-family: 'JetBrains Mono', monospace; }
-  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-  .safe-top { padding-top: env(safe-area-inset-top); }
-  input[type="number"]::-webkit-inner-spin-button,
-  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin:0; }
-  input[type="number"] { -moz-appearance: textfield; }
-  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.3); }
-  @keyframes popIn { from { opacity:0; transform: scale(0.85); } to { opacity:1; transform: scale(1); } }
-  .pop-in { animation: popIn .35s cubic-bezier(.2,.8,.3,1.1); }
-  @media (prefers-reduced-motion: reduce) { .pop-in { animation: none; } }
-  .stepper-btn { width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:600; }
-  fieldset:disabled, input:disabled, select:disabled { cursor:not-allowed; opacity:0.6; }
-  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-    outline: 2px solid #2f5fb8; outline-offset: 2px;
-  }
-  .field-error { border-color:#C0392B !important; }
-  .field-error-msg { color:#C0392B; font-size:11px; margin-top:4px; }
-</style>
+<link rel="stylesheet" href="css/app.css">
 </head>
-<body class="antialiased">
+<body class="guest-app antialiased">
+<div id="connBanner" class="fixed top-0 left-0 right-0 z-[200] bg-mess-800 text-white text-center text-xs font-medium px-3 py-2 safe-top"></div>
 
 <div class="max-w-md mx-auto min-h-screen flex flex-col bg-[#F6F2E9]">
 
@@ -77,7 +22,7 @@
       <div class="w-9 h-9 rounded-full bg-gold-400 flex items-center justify-center font-display font-bold text-white text-sm shrink-0">AM</div>
       <div class="leading-tight min-w-0">
         <div class="font-display uppercase tracking-wide text-[15px] font-semibold truncate">Officers Mess, AFA</div>
-        <div class="text-[11px] text-mess-200 -mt-0.5">Room Booking Portal for Guests</div>
+        <div class="text-[11px] text-mess-200 -mt-0.5">Accommodation booking portal for guests</div>
       </div>
     </div>
   </header>
@@ -87,24 +32,12 @@
 </div>
 
 <script type="module">
-  /* =========================================================================
-     FIRESTORE — same project as the staff Accommodation Manager app, so an
-     approved request's resultingBookingIds resolve against the same real
-     `bookings` collection. Guests never sign in here (no Firebase Auth) —
-     access control instead comes entirely from where each request document
-     LIVES: bookingRequests/{phone}/items/{requestId}. Firestore security
-     rules cannot inspect the VALUE a client filters a query on (there is no
-     way to write a rule that says "only if this query's where(phone==X)
-     matches the caller" for an unauthenticated request) — so a flat
-     collection with a phone-filtered query would be unenforceable and
-     would in fact require rules permissive enough that anyone could list
-     the WHOLE collection. Scoping by path instead means a guest can only
-     ever read/write within their own phone's subcollection, full stop.
-     See the accompanying firestore.rules notes for the staff-only
-     collection-group rule that powers the admin app's aggregate view. */
+  /* FIRESTORE — same project as the staff app. Guests never sign in and
+     never read bookings. Access is by path bookingRequests/{phone}/items/{id}.
+     Approved room labels are stamped onto the request as allocatedRooms. */
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import {
-    getFirestore, doc, setDoc, updateDoc, getDocs, collection, query, where
+    getFirestore, doc, setDoc, updateDoc, getDocs, collection
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -130,15 +63,6 @@
     snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
     return arr;
   };
-  /* Used only for the read-only "does this phone already have a confirmed
-     stay" overlap check against the main app's own `bookings` collection —
-     never written to from here. */
-  window.fsQueryByField = async function(collectionName, field, value){
-    const snap = await getDocs(query(collection(fsDb, collectionName), where(field, '==', value)));
-    const arr = [];
-    snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-    return arr;
-  };
   window.fsReady = Promise.resolve(); // resolved immediately — no auth handshake needed for guests
 </script>
 
@@ -156,6 +80,7 @@ async function requestsByPhone(phone){
     return arr.sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||''));
   }catch(e){
     console.error('Failed to load requests for this phone number', e);
+    if(typeof window.showConnBanner === 'function') window.showConnBanner('Could not load requests. Check your connection and try again.');
     return [];
   }
 }
@@ -169,24 +94,22 @@ async function persistRequest(reqObj){
 async function updateRequestDoc(phone, id, patch){
   return window.fsUpdateNestedDoc(['bookingRequests', phone, 'items', id], patch);
 }
-/* Checks the main app's real `bookings` collection for a confirmed stay
-   under this phone number, so a new request that overlaps one can be
-   flagged for staff review at approval time (flagged, not blocked). */
-async function confirmedBookingsByPhone(phone){
-  try{
-    const all = await window.fsQueryByField('bookings', 'guestPhone', phone);
-    return all.filter(b => b.status !== 'cancelled');
-  }catch(e){
-    console.error('Failed to check existing bookings for this phone number', e);
-    return [];
-  }
-}
 
 
 /* =========================================================================
    HELPERS
    ========================================================================= */
 function uid(p){ return (p||'id') + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+function escapeHtml(s){
+  if(s==null || s==='') return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
 
 /* Same normalization rule as the main app: blank is allowed to be rejected
    here (phone is mandatory on this page), otherwise must resolve to a
@@ -227,15 +150,14 @@ const PURPOSES = [
 ];
 const REQUEST_STATUS_META = {
   pending:   { label:'Pending review',  color:'#A9762F', bg:'#FAF5EA' },
-  approved:  { label:'Approved',        color:'#3F9A63', bg:'#EAF6EF' },
+  approved:  { label:'Confirmed',       color:'#3F9A63', bg:'#EAF6EF' },
   rejected:  { label:'Not approved',    color:'#C0392B', bg:'#FBEAEA' },
   cancelled: { label:'Cancelled',       color:'#7A8699', bg:'#EEF0F3' },
 };
 const MAX_PENDING_PER_PHONE = 2;
 
 /* Overall span of a request = earliest room start to latest room end,
-   across every room in it. Used for the "no overlapping pending requests"
-   rule and (later) for flagging overlap against confirmed bookings. */
+   across every room in it. Used for the "no overlapping pending requests" rule. */
 function requestSpan(req){
   const starts = req.rooms.map(r=>r.startDate);
   const ends = req.rooms.map(r=>r.endDate);
@@ -247,7 +169,11 @@ function spansOverlap(aStart, aEnd, bStart, bEnd){ return aStart <= bEnd && bSta
    STATE
    ========================================================================= */
 const state = {
-  view: 'landing',       // landing | statusPhone | statusResults | requestGate | requestForm | requestReview | requestSuccess | requestDetail
+  view: 'landing',       // landing | statusPhone | statusResults | requestGate | requestForm | requestReview | requestSuccess | requestDetail | cancelReason
+  cancelingId: null,
+  cancelKind: null,
+  cancelReason: '',
+  cancelReasonError: '',
   statusPhone: '',
   statusResults: null,
   gatePhone: '',
@@ -291,6 +217,7 @@ function render(){
   else if(state.view==='requestReview')  app.innerHTML = renderRequestReview();
   else if(state.view==='requestSuccess') app.innerHTML = renderRequestSuccess();
   else if(state.view==='requestDetail')  app.innerHTML = renderRequestDetail();
+  else if(state.view==='cancelReason')   app.innerHTML = renderCancelReason();
 }
 /* The only place scroll position is reset — a genuine screen change.
    Same-screen updates (a stepper tap, adding a child row, typing a field)
@@ -368,6 +295,40 @@ function canEditRequest(req){
   return false;
 }
 
+function renderAllocatedRooms(req, onDark){
+  const rooms = req.allocatedRooms || [];
+  if(req.status !== 'approved' || !rooms.length) return '';
+  const titleClass = onDark ? 'text-white' : 'text-mess-900';
+  const subClass = onDark ? 'text-mess-200' : 'text-mess-600';
+  return rooms.map(r => `
+    <div class="mb-2">
+      <div class="font-display text-lg font-semibold ${titleClass} leading-tight">${escapeHtml(r.label)}</div>
+      <div class="text-[12px] ${subClass} mt-0.5">${fmtLong(r.startDate)} ${timeOrDefault(r.startTime, DEFAULT_CHECKIN_TIME)} &rarr; ${r.endDate ? fmtLong(r.endDate) + ' ' + timeOrDefault(r.endTime, DEFAULT_CHECKOUT_TIME) : 'Open-ended (living-in)'}</div>
+    </div>`).join('');
+}
+function renderReceptionContacts(req){
+  const list = req.receptionContacts || [];
+  if(req.status !== 'approved' || !list.length) return '';
+  return `
+    <div class="mt-3 bg-white border border-mess-100 rounded-xl p-3">
+      <div class="text-[10px] font-semibold text-mess-500 uppercase tracking-wide mb-1.5">Reception</div>
+      ${list.map(o => `
+        <div class="flex items-baseline justify-between gap-2 text-[12px] text-mess-800 py-0.5">
+          <span>${escapeHtml(o.name||'')}</span>
+          <a class="font-mono-num text-mess-700" href="tel:${escapeHtml(String(o.phone||'').replace(/\s/g,''))}" onclick="event.stopPropagation()">${escapeHtml(o.phone||'')}</a>
+        </div>`).join('')}
+    </div>`;
+}
+function renderApprovedStayCard(req, withReception){
+  if(req.status !== 'approved' || !(req.allocatedRooms||[]).length) return '';
+  return `
+    <div class="bg-mess-800 text-white rounded-2xl p-4 mb-3">
+      <div class="text-[10px] font-semibold uppercase tracking-wide text-brass-300 mb-2">Confirmed stay</div>
+      ${renderAllocatedRooms(req, true)}
+    </div>
+    ${withReception ? renderReceptionContacts(req) : ''}`;
+}
+
 function renderStatusResults(){
   const results = state.statusResults || [];
   const phoneLabel = formatPhoneDisplay(state._statusPhoneNormalized);
@@ -377,22 +338,26 @@ function renderStatusResults(){
 
     let actionHtml = '';
     if(r.status==='pending'){
-      actionHtml = `<button onclick="event.stopPropagation(); cancelGuestRequest('${r.id}','pending')" class="mt-2.5 w-full py-2 rounded-lg border border-red-200 text-red-600 text-[12px] font-semibold">Cancel request</button>`;
+      actionHtml = `<button onclick="event.stopPropagation(); startCancel('${r.id}','pending')" class="mt-2.5 w-full py-2 rounded-lg border border-red-200 text-red-600 text-[12px] font-semibold">Cancel request</button>`;
     } else if(r.status==='approved'){
       if(canCancelApproved(span)){
-        actionHtml = `<button onclick="event.stopPropagation(); cancelGuestRequest('${r.id}','approved')" class="mt-2.5 w-full py-2 rounded-lg border border-red-200 text-red-600 text-[12px] font-semibold">Cancel booking</button>`;
+        actionHtml = `<button onclick="event.stopPropagation(); startCancel('${r.id}','approved')" class="mt-2.5 w-full py-2 rounded-lg border border-red-200 text-red-600 text-[12px] font-semibold">Cancel booking</button>`;
       } else {
         actionHtml = `<div class="mt-2.5 text-[11px] text-mess-400 bg-mess-50 rounded-lg px-2.5 py-2">Too close to arrival to cancel here — please contact the mess reception directly.</div>`;
       }
     }
 
+    const approvedStay = renderApprovedStayCard(r, false);
     return `
     <div onclick="viewRequest('${r.id}')" class="bg-white rounded-xl border border-mess-100 p-3.5 mb-2.5 active:bg-mess-50/60">
       <div class="mb-1.5">
         <span class="text-[9px] font-semibold px-2 py-1 rounded-full" style="background:${meta.bg};color:${meta.color}">${meta.label}</span>
       </div>
-      <div class="text-sm font-medium text-mess-900">${r.contactName}</div>
-      <div class="text-[12px] text-mess-500 mt-0.5">${fmtShort(span.start)} &ndash; ${fmtShort(span.end)} &middot; ${r.rooms.length} room${r.rooms.length===1?'':'s'} &middot; ${(PURPOSES.find(p=>p.key===r.purpose)||{}).label||r.purpose}</div>
+      ${approvedStay || `
+        <div class="text-sm font-medium text-mess-900">${escapeHtml(r.contactName)}</div>
+        <div class="text-[12px] text-mess-500 mt-0.5">${fmtShort(span.start)} &ndash; ${fmtShort(span.end)} &middot; ${r.rooms.length} room${r.rooms.length===1?'':'s'} &middot; ${(PURPOSES.find(p=>p.key===r.purpose)||{}).label||r.purpose}</div>
+      `}
+      ${approvedStay ? `<div class="text-[12px] text-mess-500 mt-2">${escapeHtml(r.contactName)} &middot; ${(PURPOSES.find(p=>p.key===r.purpose)||{}).label||r.purpose}</div>` : ''}
       <div class="text-[11px] text-mess-400 mt-1">Tap to view details &rsaquo;</div>
       ${actionHtml}
     </div>`;
@@ -412,27 +377,67 @@ function renderStatusResults(){
     <button onclick="goTo('landing')" class="w-full mt-2 py-3 rounded-xl border border-mess-200 text-mess-700 text-sm font-semibold">Back to home</button>
   </div>`;
 }
-/* TODO (Firebase integration): cancelling an *approved* request here must
-   also cancel the corresponding real booking(s) in the main app's
-   `bookings` collection (resultingBookingIds) — not just this request
-   record — so the room actually frees up for staff to reallocate. */
-async function cancelGuestRequest(id, kind){
-  const msg = kind==='pending'
-    ? 'Cancel this booking request? This cannot be undone.'
-    : 'Cancel this confirmed booking? This cannot be undone, and the room will be released.';
-  if(!window.confirm(msg)) return;
-
+/* Guest cancel updates this request (status + cancellationReason). The
+   staff app releases linked bookings when a signed-in device sees it. */
+function startCancel(id, kind){
+  state.cancelingId = id;
+  state.cancelKind = kind;
+  state.cancelReason = '';
+  state.cancelReasonError = '';
+  state.cancelReturnView = state.view;
+  goTo('cancelReason');
+}
+function renderCancelReason(){
+  const req = (state.statusResults||[]).find(r=>r.id===state.cancelingId);
+  if(!req){
+    return `<div class="text-center text-sm text-mess-500 py-10">This request could not be found.<br><button onclick="goTo('statusResults')" class="mt-3 text-mess-700 font-semibold">Back</button></div>`;
+  }
+  const approved = state.cancelKind === 'approved';
+  return `
+  <div>
+    <button onclick="goTo(state.cancelReturnView||'statusResults')" class="text-sm text-mess-500 mb-4">&larr; Back</button>
+    <div class="font-display text-xl font-semibold text-mess-900 mb-1">${approved ? 'Cancel booking' : 'Cancel request'}</div>
+    <div class="text-sm text-mess-500 mb-4">Please give a reason. This cannot be undone.</div>
+    <label for="cancelReasonInput" class="text-xs font-medium text-mess-600">Reason</label>
+    <textarea id="cancelReasonInput" maxlength="300" rows="3" placeholder="Why are you cancelling?"
+      oninput="state.cancelReason=this.value; state.cancelReasonError='';"
+      class="w-full mt-1 border ${state.cancelReasonError?'field-error':'border-mess-200'} rounded-xl px-3 py-3 text-sm bg-white">${escapeHtml(state.cancelReason)}</textarea>
+    ${state.cancelReasonError ? `<div class="field-error-msg">${state.cancelReasonError}</div>` : ''}
+    <button id="confirmCancelBtn" onclick="confirmCancel()" class="w-full mt-4 py-3 rounded-xl border border-red-200 text-red-600 text-sm font-semibold">Confirm cancellation</button>
+  </div>`;
+}
+async function confirmCancel(){
+  const reason = (document.getElementById('cancelReasonInput')||{}).value;
+  const trimmed = (reason || '').trim();
+  if(!trimmed){
+    state.cancelReason = '';
+    state.cancelReasonError = 'Enter a reason for cancellation.';
+    render();
+    return;
+  }
+  if(trimmed.length > 300){
+    state.cancelReason = trimmed;
+    state.cancelReasonError = 'Keep the reason within 300 characters.';
+    render();
+    return;
+  }
+  const id = state.cancelingId;
   const req = (state.statusResults||[]).find(r=>r.id===id);
   if(!req) return;
+  const btn = document.getElementById('confirmCancelBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Cancelling…'; }
   try{
-    await updateRequestDoc(req.phone, id, { status: 'cancelled' });
+    await updateRequestDoc(req.phone, id, { status: 'cancelled', cancellationReason: trimmed });
   }catch(e){
     console.error('Cancel failed', e);
-    window.alert('Could not cancel this request — check your connection and try again.');
+    window.alert('Could not cancel this request — check your connection and try again. If this keeps happening, publish the latest firestore.rules in Firebase Console.');
+    if(btn){ btn.disabled = false; btn.textContent = 'Confirm cancellation'; }
     return;
   }
   state.statusResults = await requestsByPhone(state._statusPhoneNormalized);
-  render();
+  state.viewingRequestId = id;
+  state.cancelingId = null;
+  goTo('requestDetail');
 }
 
 /* =========================================================================
@@ -462,6 +467,7 @@ function renderRequestDetail(){
       ${r.extraBedding ? `<div class="text-[11px] text-gold-700 mt-1">+ Extra bedding requested</div>` : ''}
     </div>`).join('');
 
+  const approved = req.status === 'approved' && (req.allocatedRooms||[]).length;
   return `
   <div>
     <button onclick="goTo('statusResults')" class="text-sm text-mess-500 mb-4">&larr; Back to my requests</button>
@@ -469,20 +475,21 @@ function renderRequestDetail(){
     <div class="mb-1.5">
       <span class="text-[9px] font-semibold px-2 py-1 rounded-full" style="background:${meta.bg};color:${meta.color}">${meta.label}</span>
     </div>
-    <div class="font-display text-xl font-semibold text-mess-900 mb-1">${req.contactName}</div>
-    <div class="text-sm text-mess-500 mb-4">${formatPhoneDisplay(req.phone)} &middot; ${(PURPOSES.find(p=>p.key===req.purpose)||{}).label||req.purpose}</div>
+    ${approved ? renderApprovedStayCard(req, true) : ''}
+    <div class="font-display ${approved ? 'text-base mt-3' : 'text-xl'} font-semibold text-mess-900 mb-1">${escapeHtml(req.contactName)}</div>
+    <div class="text-sm text-mess-500 ${approved ? 'mb-3' : 'mb-4'}">${formatPhoneDisplay(req.phone)} &middot; ${(PURPOSES.find(p=>p.key===req.purpose)||{}).label||req.purpose}</div>
 
+    ${approved ? `<div class="text-[10px] font-semibold text-mess-400 uppercase tracking-wide mb-1.5">What you requested</div>` : ''}
     ${roomsHtml}
-
-    ${req.status==='rejected' && req.rejectionReason ? `<div class="bg-red-50 border border-red-100 rounded-xl p-3 mb-2"><div class="text-[11px] text-red-400 mb-0.5">Reason</div><div class="text-[12px] text-red-700">${req.rejectionReason}</div></div>` : ''}
-
-    ${req.remarks ? `<div class="bg-white border border-mess-100 rounded-xl p-3 mb-2"><div class="text-[11px] text-mess-400 mb-0.5">Remarks</div><div class="text-[12px] text-mess-700">${req.remarks}</div></div>` : ''}
+    ${req.remarks ? `<div class="bg-white border border-mess-100 rounded-xl p-3 mb-2"><div class="text-[11px] text-mess-400 mb-0.5">Remarks</div><div class="text-[12px] text-mess-700">${escapeHtml(req.remarks)}</div></div>` : ''}
 
     <div class="flex gap-2 mt-4">
       ${editable ? `<button onclick="editRequest('${req.id}')" class="flex-1 py-3 rounded-xl border border-mess-300 text-mess-700 text-sm font-semibold">Edit</button>` : ''}
-      ${(req.status==='pending' || (req.status==='approved' && canCancelApproved(span))) ? `<button onclick="cancelGuestRequest('${req.id}','${req.status}')" class="flex-1 py-3 rounded-xl border border-red-200 text-red-600 text-sm font-semibold">Cancel</button>` : ''}
+      ${(req.status==='pending' || (req.status==='approved' && canCancelApproved(span))) ? `<button onclick="startCancel('${req.id}','${req.status}')" class="flex-1 py-3 rounded-xl border border-red-200 text-red-600 text-sm font-semibold">Cancel</button>` : ''}
     </div>
     ${!editable && req.status==='approved' ? `<div class="text-[11px] text-mess-400 mt-2 text-center">Too close to arrival to edit or cancel here — please contact the mess reception directly.</div>` : ''}
+    ${req.status==='rejected' && req.rejectionReason ? `<div class="bg-red-50 border border-red-100 rounded-xl p-3 mt-4"><div class="text-[11px] text-red-400 mb-0.5">Reason for rejection</div><div class="text-[12px] text-red-700">${escapeHtml(req.rejectionReason)}</div></div>` : ''}
+    ${req.status==='cancelled' && req.cancellationReason ? `<div class="bg-mess-50 border border-mess-100 rounded-xl p-3 mt-4"><div class="text-[11px] text-mess-400 mb-0.5">Reason for cancellation</div><div class="text-[12px] text-mess-700">${escapeHtml(req.cancellationReason)}</div></div>` : ''}
   </div>`;
 }
 /* Loads an existing request back into the form for editing. Reuses the
@@ -750,7 +757,7 @@ function renderRequestForm(){
 
     <div class="bg-white rounded-2xl border border-mess-100 p-3 mb-2">
       <label for="contactNameInput" class="text-xs font-medium text-mess-600">Your name</label>
-      <input id="contactNameInput" value="${f.contactName}" maxlength="60" oninput="updateField('contactName', this.value)" placeholder="Contact person's full name" class="w-full mt-1 border ${state.fieldErrors['contactName']?'field-error':'border-mess-200'} rounded-lg px-3 py-2 text-sm">
+      <input id="contactNameInput" value="${escapeHtml(f.contactName)}" maxlength="60" oninput="updateField('contactName', this.value)" placeholder="Contact person's full name" class="w-full mt-1 border ${state.fieldErrors['contactName']?'field-error':'border-mess-200'} rounded-lg px-3 py-2 text-sm">
       ${state.fieldErrors['contactName'] ? `<div class="field-error-msg">${state.fieldErrors['contactName']}</div>` : ''}
 
       <div class="grid grid-cols-2 gap-2 mt-2">
@@ -775,7 +782,7 @@ function renderRequestForm(){
 
     <div class="bg-white rounded-2xl border border-mess-100 p-3 mb-3">
       <label for="remarksInput" class="text-xs font-medium text-mess-600">Remarks (optional)</label>
-      <textarea id="remarksInput" oninput="updateField('remarks', this.value)" maxlength="300" rows="2" placeholder="e.g. early check-in, dietary needs" class="w-full mt-1 border border-mess-200 rounded-lg px-3 py-2 text-sm">${f.remarks}</textarea>
+      <textarea id="remarksInput" oninput="updateField('remarks', this.value)" maxlength="300" rows="2" placeholder="e.g. early check-in, dietary needs" class="w-full mt-1 border border-mess-200 rounded-lg px-3 py-2 text-sm">${escapeHtml(f.remarks)}</textarea>
     </div>
 
     <button id="submitBtn" onclick="reviewRequest()" class="w-full py-3 rounded-xl bg-mess-800 text-white text-sm font-semibold">${editing ? 'Review changes' : 'Review request'}</button>
@@ -842,13 +849,13 @@ function renderRequestReview(){
     <div id="reviewError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl px-3.5 py-2.5 mb-3"></div>
 
     <div class="bg-white border border-mess-100 rounded-xl p-3.5 mb-2">
-      <div class="text-sm font-medium text-mess-900">${f.contactName}</div>
+      <div class="text-sm font-medium text-mess-900">${escapeHtml(f.contactName)}</div>
       <div class="text-[12px] text-mess-500 mt-0.5">${formatPhoneDisplay(state._gatePhoneNormalized)} &middot; ${(PURPOSES.find(p=>p.key===f.purpose)||{}).label||f.purpose}</div>
     </div>
 
     ${roomsHtml}
 
-    ${f.remarks ? `<div class="bg-white border border-mess-100 rounded-xl p-3 mb-3"><div class="text-[11px] text-mess-400 mb-0.5">Remarks</div><div class="text-[12px] text-mess-700">${f.remarks}</div></div>` : ''}
+    ${f.remarks ? `<div class="bg-white border border-mess-100 rounded-xl p-3 mb-3"><div class="text-[11px] text-mess-400 mb-0.5">Remarks</div><div class="text-[12px] text-mess-700">${escapeHtml(f.remarks)}</div></div>` : ''}
 
     <button id="confirmBtn" onclick="confirmSubmit()" class="w-full py-3.5 rounded-xl bg-mess-800 text-white text-sm font-semibold">${editing ? 'Confirm changes' : 'Confirm & submit'}</button>
     <button onclick="goTo('requestForm')" class="w-full mt-2 py-3 rounded-xl border border-mess-200 text-mess-700 text-sm font-semibold">Go back and edit</button>
@@ -868,7 +875,7 @@ async function confirmSubmit(){
   const editingId = state.editingId;
 
   const btn = document.getElementById('confirmBtn');
-  if(btn){ btn.disabled = true; btn.textContent = 'Checking availability…'; }
+  if(btn){ btn.disabled = true; btn.textContent = 'Checking…'; }
 
   // Pending checks always exclude the record being edited itself — editing
   // a request isn't "another" request competing for the same slot.
@@ -891,18 +898,13 @@ async function confirmSubmit(){
   }
   errBox.classList.add('hidden');
 
-  // Soft flag only (not blocking) against confirmed bookings under this
-  // phone — surfaced to staff, not the guest.
-  const confirmedBookings = await confirmedBookingsByPhone(phone);
-  const overlapsConfirmed = confirmedBookings.some(b=>spansOverlap(newSpan.start,newSpan.end,b.startDate,b.endDate));
-
   state.submitting = true;
   if(btn){ btn.textContent = editingId ? 'Saving…' : 'Submitting…'; }
 
   const roomsPayload = f.rooms.map(r=>({
     adults: parseInt(r.adults,10)||0,
     extraBedding: !!r.extraBedding,
-    children: r.children.map(c=>({ age: parseInt(c.age,10)||0 })),
+        children: (r.children||[]).map(c=>({ age: parseInt(c.age,10)||0 })),
     startDate: r.startDate, endDate: r.endDate,
     startTime: timeOrDefault(r.startTime, DEFAULT_CHECKIN_TIME),
     endTime: timeOrDefault(r.endTime, DEFAULT_CHECKOUT_TIME),
@@ -910,13 +912,8 @@ async function confirmSubmit(){
 
   try{
     if(editingId){
-      /* TODO: if the original status was 'approved', the real room
-         booking(s) in the main app's `bookings` collection need to be
-         released/re-flagged too, not just this request document — an
-         edited confirmed booking shouldn't silently keep holding a room
-         under the old dates while showing 'pending' here. That requires
-         either a Cloud Function trigger or the admin app handling it when
-         it next syncs; left as a known gap for now. */
+      /* Re-editing an approved request sets it back to pending. Staff app
+         cancels the old bookings when it sees previousStatus === 'approved'. */
       const existing = (state.statusResults||[]).find(r=>r.id===editingId);
       const wasApproved = existing && existing.status === 'approved';
       const patch = {
@@ -924,8 +921,7 @@ async function confirmSubmit(){
         purpose: f.purpose,
         remarks: f.remarks.trim(),
         rooms: roomsPayload,
-        overlapsExisting: overlapsConfirmed,
-        status: 'pending', // any edit — including to a confirmed booking — goes back to pending for staff to re-confirm
+        status: 'pending',
         editedAt: new Date().toISOString(),
       };
       if(wasApproved) patch.previousStatus = 'approved';
@@ -947,29 +943,39 @@ async function confirmSubmit(){
       remarks: f.remarks.trim(),
       rooms: roomsPayload,
       status: 'pending',
-      overlapsExisting: overlapsConfirmed,
       createdAt: new Date().toISOString(),
       resultingBookingIds: [],
     };
     await persistRequest(reqObj);
+    state.lastSubmitPhone = phone;
+    state.lastSubmitName = f.contactName.trim();
+    state.lastSubmitSpan = { start: newSpan.start, end: newSpan.end };
 
     state.submitting = false;
     goTo('requestSuccess');
   }catch(e){
     console.error('Submit failed', e);
     state.submitting = false;
-    errBox.textContent = 'Something went wrong submitting this — check your connection and try again.';
+    const code = (e && e.code) || '';
+    errBox.textContent = code.includes('permission')
+      ? 'Submit was blocked by database rules. In Firebase Console → Firestore → Rules, publish the project firestore.rules file, then try again.'
+      : 'Something went wrong submitting this — check your connection and try again.';
     errBox.classList.remove('hidden');
     if(btn){ btn.disabled = false; btn.textContent = editingId ? 'Confirm changes' : 'Confirm & submit'; }
   }
 }
 
 function renderRequestSuccess(){
+  const phoneLabel = formatPhoneDisplay(state.lastSubmitPhone || state._gatePhoneNormalized);
+  const span = state.lastSubmitSpan;
+  const when = span ? `${fmtLong(span.start)} – ${fmtLong(span.end)}` : '';
   return `
   <div class="text-center pt-6">
     <div class="w-16 h-16 rounded-full bg-mess-50 text-mess-700 flex items-center justify-center text-3xl mx-auto mb-4 pop-in">&#10003;</div>
     <div class="font-display text-xl font-semibold text-mess-900 mb-1">Request submitted</div>
-    <div class="text-sm text-mess-500 mb-6 px-2">Check status anytime using your phone number.</div>
+    <div class="text-sm text-mess-500 mb-2 px-2">Mess staff will review it and confirm a room. This is not a confirmed booking yet.</div>
+    ${when ? `<div class="text-[12px] text-mess-600 mb-2">Requested stay: ${when}</div>` : ''}
+    <div class="text-sm text-mess-700 mb-6 px-2">Check status anytime with <span class="font-semibold">${phoneLabel}</span> on the home screen (“Check my booking status”).</div>
     <button onclick="goTo('landing')" class="w-full py-3 rounded-xl bg-mess-800 text-white text-sm font-semibold">Back to home</button>
   </div>`;
 }
@@ -978,6 +984,15 @@ function renderRequestSuccess(){
    INIT
    ========================================================================= */
 render();
+window.showConnBanner = function(msg){
+  const el = document.getElementById('connBanner');
+  if(!el) return;
+  if(!msg){ el.classList.remove('is-on'); el.textContent = ''; return; }
+  el.textContent = msg;
+  el.classList.add('is-on');
+};
+window.addEventListener('offline', ()=> window.showConnBanner('You are offline. Check your connection and try again when you are back online.'));
+window.addEventListener('online', ()=> window.showConnBanner(''));
 </script>
 </body>
 </html>

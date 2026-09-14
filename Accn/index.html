@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
-<title>Accomodation Manager</title>
+<title>Accommodation Manager</title>
 <meta name="description" content="Room booking and accommodation management for Officers Mess, Air Force Academy.">
 <meta name="theme-color" content="#122d5e">
 
@@ -34,88 +34,17 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        fontFamily: {
-          display: ['Oswald', 'sans-serif'],
-          body: ['Inter', 'sans-serif'],
-          mono: ['JetBrains Mono', 'monospace'],
-        },
-        colors: {
-          mess: {
-            50:  '#eef3fb', 100: '#d7e3f5', 200: '#b0c7ec', 300: '#7fa3de', 400: '#4d7dce',
-            500: '#2f5fb8', 600: '#1f4694', 700: '#173a7a', 800: '#122d5e', 900: '#0c1f42',
-          },
-          brass: {
-            50:  '#eaf6fd', 100: '#cceaf9', 200: '#99d5f3', 300: '#5bb9ea', 400: '#2ea1de',
-            500: '#1c8cc9', 600: '#156fa1', 700: '#125a83', 800: '#0f4868', 900: '#0a3147',
-          },
-          status: { livingin: '#7C5CBF', td: '#0891B2', leave: '#3F9A63', guest: '#D9932A', vip: '#B3542E' }
-        },
-        boxShadow: { tab: '0 -1px 0 rgba(12,31,66,0.08), 0 -6px 16px -8px rgba(12,31,66,0.18)' }
-      }
-    }
-  }
-</script>
-<style>
-  html, body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; height: 100%; }
-  body { font-family: 'Inter', sans-serif; background:#f5f7fb; margin: 0; }
-
-  /* ===================== APP SHELL HEIGHT =====================
-     #app is a fixed-viewport-height flex column (header, then the
-     sidebar+content row filling everything else — see the markup).
-     This is what makes #app-content (and, inside the Gantt tab, the
-     grid itself) genuinely SCROLL, rather than the whole page scrolling
-     — which in turn is what makes position:sticky headers actually
-     freeze during a vertical scroll instead of just scrolling away.
-     100dvh is preferred (accounts for mobile browser/PWA chrome that
-     shows/hides on scroll); browsers without dvh support silently keep
-     the 100vh rule above it, since an unsupported value is dropped. */
-  #app { height: 100vh; }
-  @supports (height: 100dvh) { #app { height: 100dvh; } }
-
-  /* On tablet/laptop the app widens into a centered "card" (see #app's
-     lg:max-w-6xl) rather than stretching edge-to-edge — this backdrop gives
-     that card something to sit on so wide viewports don't just look like a
-     mobile layout with wasted margins. */
-  @media (min-width: 1024px) {
-    body { background: linear-gradient(180deg, #e7edf8 0%, #eef1f7 340px, #eef1f7 100%); }
-    #app { border-radius: 20px; margin-top: 20px; margin-bottom: 20px; height: calc(100vh - 40px); box-shadow: 0 20px 50px -20px rgba(12,31,66,0.35); }
-    @supports (height: 100dvh) { #app { height: calc(100dvh - 40px); } }
-    #app > header.safe-top { padding-top: 0; }
-  }
-  .font-display { font-family: 'Oswald', sans-serif; }
-  .font-mono-num { font-family: 'JetBrains Mono', monospace; }
-  ::-webkit-scrollbar { height: 6px; width: 6px; }
-  ::-webkit-scrollbar-thumb { background: #b0c7ec; border-radius: 4px; }
-  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-  .safe-top { padding-top: env(safe-area-inset-top); }
-  .gantt-cell { min-width: 40px; }
-  .gantt-name-col { position: sticky; left: 0; z-index: 6; }
-  .modal-backdrop { backdrop-filter: blur(2px); }
-  @keyframes toastIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform: translateY(0);} }
-  .toast-anim { animation: toastIn .18s ease-out; }
-  .tab-active { color: #122d5e; }
-  .tab-inactive { color: #9aa7bd; }
-  .ring-track { transition: stroke-dashoffset .6s ease; }
-  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.3); }
-  .accordion-open .chev { transform: rotate(90deg); }
-  .scrollbar-none::-webkit-scrollbar{ display:none; }
-  .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
-  fieldset:disabled, input:disabled, select:disabled { cursor: not-allowed; }
-</style>
+<link rel="stylesheet" href="css/app.css">
 </head>
-<body class="font-body text-mess-900 antialiased">
+<body class="staff-app font-body text-mess-900 antialiased">
+<div id="connBanner" class="fixed top-0 left-0 right-0 z-[200] bg-mess-800 text-white text-center text-xs font-medium px-3 py-2 safe-top"></div>
 
 <!-- ===================== LOGIN SCREEN ===================== -->
 <div id="loginScreen" class="fixed inset-0 z-[100] bg-mess-800 flex items-center justify-center px-6 safe-top safe-bottom">
   <div class="w-full max-w-sm bg-white rounded-2xl p-6 shadow-xl">
     <div class="flex flex-col items-center mb-5">
       <div class="w-12 h-12 rounded-full bg-brass-500 flex items-center justify-center font-display font-bold text-white text-lg mb-2">AM</div>
-      <div class="font-display uppercase tracking-wide text-base font-semibold text-mess-800">Accomodation Manager</div>
+      <div class="font-display uppercase tracking-wide text-base font-semibold text-mess-800">Accommodation Manager</div>
       <div class="text-[11px] text-mess-500">Officers Mess &middot; Sign in</div>
     </div>
     <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-3">
@@ -161,7 +90,7 @@
       <div class="flex items-center gap-2">
         <div class="w-8 h-8 rounded-full bg-brass-500 flex items-center justify-center font-display font-bold text-white text-sm">AM</div>
         <div class="leading-tight">
-          <div class="font-display uppercase tracking-wide text-[15px] font-semibold">Accomodation Manager</div>
+          <div class="font-display uppercase tracking-wide text-[15px] font-semibold">Accommodation Manager</div>
           <div class="text-[10px] text-mess-200 -mt-0.5">Officers Mess &middot; Bookings</div>
         </div>
       </div>
@@ -198,7 +127,7 @@
   </nav>
 
   <!-- ===================== ROLE SHEET ===================== -->
-  <div id="roleSheet" class="fixed inset-0 z-50 hidden">
+  <div id="roleSheet" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
     <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeRoleSheet()"></div>
     <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl p-4 safe-bottom" id="roleSheetContent">
       <div class="w-10 h-1 bg-mess-200 rounded-full mx-auto mb-3"></div>
@@ -210,7 +139,7 @@
   </div>
 
   <!-- ===================== BOOKING MODAL ===================== -->
-  <div id="bookingModal" class="fixed inset-0 z-50 hidden">
+  <div id="bookingModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
     <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeBookingModal()"></div>
     <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl safe-bottom max-h-[95vh] overflow-y-auto">
       <div class="sticky top-0 bg-white px-4 pt-3 pb-2 border-b border-mess-100 flex items-center justify-between">
@@ -330,7 +259,7 @@
   </div>
 
   <!-- ===================== BOOKING DETAIL / CELL MODAL ===================== -->
-  <div id="detailModal" class="fixed inset-0 z-50 hidden">
+  <div id="detailModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
     <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeDetailModal()"></div>
     <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl p-4 safe-bottom max-h-[85vh] overflow-y-auto">
       <div id="detailModalBody"></div>
@@ -338,7 +267,7 @@
   </div>
 
   <!-- ===================== WHATSAPP MODAL ===================== -->
-  <div id="waModal" class="fixed inset-0 z-50 hidden">
+  <div id="waModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
     <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeWaModal()"></div>
     <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl p-4 safe-bottom">
       <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-2">WhatsApp intimation</div>
@@ -353,7 +282,7 @@
   </div>
 
   <!-- ===================== ROOM MODAL (Admin: add/edit room) ===================== -->
-  <div id="roomModal" class="fixed inset-0 z-50 hidden">
+  <div id="roomModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
     <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeRoomModal()"></div>
     <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl safe-bottom max-h-[92vh] overflow-y-auto">
       <div class="sticky top-0 bg-white px-4 pt-3 pb-2 border-b border-mess-100 flex items-center justify-between">
@@ -422,7 +351,7 @@
     setPersistence, browserLocalPersistence
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
   import {
-    getFirestore, collection, collectionGroup, doc, setDoc, updateDoc, onSnapshot, enableIndexedDbPersistence
+    getFirestore, collection, collectionGroup, doc, setDoc, updateDoc, writeBatch, onSnapshot, enableIndexedDbPersistence
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -474,6 +403,14 @@
      Firestore document ID (matching the app's existing uid()-based model),
      via setDoc(doc(collection, id), data).
      ========================================================================= */
+  window.fsOnDoc = function(collectionName, id, callback){
+    return onSnapshot(doc(fsDb, collectionName, id), (snap) => {
+      callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    }, (err) => {
+      console.error('Firestore doc listen error on "' + collectionName + '/' + id + '":', err);
+      if(typeof window.showConnBanner === 'function') window.showConnBanner('Could not load mess data. Check your connection and try again.');
+    });
+  };
   window.fsSetDoc = function(collectionName, id, data){
     return setDoc(doc(fsDb, collectionName, id), data);
   };
@@ -487,6 +424,7 @@
       callback(arr);
     }, (err) => {
       console.error('Firestore listen error on "' + collectionName + '":', err);
+      if(typeof window.showConnBanner === 'function') window.showConnBanner('Could not load mess data. Check your connection and try again.');
     });
   };
   /* Guest requests live at bookingRequests/{phone}/items/{id} — scoped by
@@ -500,16 +438,31 @@
   window.fsOnSnapshotGroup = function(groupName, callback){
     return onSnapshot(collectionGroup(fsDb, groupName), (snap) => {
       const arr = [];
-      snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+      snap.forEach(d => {
+        const phoneFromPath = (d.ref.parent && d.ref.parent.parent) ? d.ref.parent.parent.id : '';
+        const data = d.data() || {};
+        arr.push({ id: d.id, ...data, phone: data.phone || phoneFromPath });
+      });
       callback(arr);
     }, (err) => {
       console.error('Firestore collection-group listen error on "' + groupName + '":', err);
+      if(typeof window.showConnBanner === 'function') window.showConnBanner('Could not load guest requests. Check your connection and try again.');
     });
   };
   /* Writes to a document at an arbitrary nested path (e.g. a specific
      guest's request) rather than a flat top-level collection. */
   window.fsUpdateNestedDoc = function(pathSegments, data){
     return updateDoc(doc(fsDb, ...pathSegments), data);
+  };
+  /* Atomic multi-doc write (approve + linked-booking release). Spark-safe. */
+  window.fsCommitBatch = function(ops){
+    const batch = writeBatch(fsDb);
+    ops.forEach(op => {
+      const ref = doc(fsDb, ...op.path);
+      if(op.kind === 'set') batch.set(ref, op.data);
+      else batch.update(ref, op.data);
+    });
+    return batch.commit();
   };
 </script>
 
@@ -521,8 +474,8 @@
    Firestore through persistBooking/persistRoom/persistBlock/persistAuditEntry,
    and the listeners echo the change back into DB for every signed-in device.
    ========================================================================= */
-const ROLES = ['Mess Secretary','PMC','Accomodation Member','Mess Manager'];
-const ADMIN_ROLES = ['Mess Secretary','PMC','Accomodation Member'];
+const ROLES = ['Mess Secretary','PMC','Accommodation Member','Mess Manager'];
+const ADMIN_ROLES = ['Mess Secretary','PMC','Accommodation Member'];
 
 /* =========================================================================
    LOGIN / AUTH
@@ -530,12 +483,12 @@ const ADMIN_ROLES = ['Mess Secretary','PMC','Accomodation Member'];
    before @omafa.in) to the app role that user should land on after signing
    in. Add an entry here for every login you create in Firebase Auth.
    Known so far: pmc@omafa.in -> PMC, messsec@omafa.in -> Mess Secretary.
-   Usernames not listed below still sign in fine (any valid Firebase Auth
-   account works) but default to the first role until mapped here. */
+   Usernames not listed below are signed out — they must not inherit an
+   admin role. */
 const USERNAME_ROLE_MAP = {
   'pmc':          'PMC',
   'messsec':      'Mess Secretary',
-  'accnmember':   'Accomodation Member',
+  'accnmember':   'Accommodation Member',
   'messmanager':  'Mess Manager',
 };
 let currentAuthUser = null;
@@ -582,7 +535,20 @@ window.onAuthStateChangedHandler = function(user){
   const loadingScreen = document.getElementById('dataLoadingScreen');
   if(user){
     const prefix = (user.email || '').split('@')[0].toLowerCase();
-    state.role = USERNAME_ROLE_MAP[prefix] || ROLES[0];
+    if(!USERNAME_ROLE_MAP[prefix]){
+      const errBox = document.getElementById('loginError');
+      if(errBox){
+        errBox.textContent = 'This account is not authorised for Accommodation Manager.';
+        errBox.classList.remove('hidden');
+      }
+      const btn = document.getElementById('loginSubmitBtn');
+      if(btn){ btn.disabled = false; btn.textContent = 'Sign in'; }
+      loginScreen.classList.remove('hidden');
+      loadingScreen.classList.add('hidden');
+      if(window.firebaseLogout) window.firebaseLogout();
+      return;
+    }
+    state.role = USERNAME_ROLE_MAP[prefix];
     if((state.tab==='admin' || state.tab==='requests') && !isAdmin(state.role)) state.tab = 'dashboard';
     loginScreen.classList.add('hidden');
     const form = document.getElementById('loginForm');
@@ -620,15 +586,28 @@ const BOOKING_STATUS_META = {
   cancelled: { label: 'Cancelled', color: '#7A8699', bg: '#EEF0F3' },
 };
 /* Reception orderly contact numbers included in every WhatsApp intimation. */
-const RECEPTION_ORDERLIES = [
+const DEFAULT_RECEPTION_ORDERLIES = [
   { name: 'Chari', phone: '09550723611' },
   { name: 'Ajay',  phone: '09542660134' },
 ];
+function receptionOrderlies(){
+  return (DB.receptionOrderlies && DB.receptionOrderlies.length) ? DB.receptionOrderlies : DEFAULT_RECEPTION_ORDERLIES;
+}
 const CELL_W = 40;
 const DATE_ROW_H = 54;
 const SHARING_CAPACITY = 2;
 
 function uid(p){ return (p||'id') + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+function escapeHtml(s){
+  if(s==null || s==='') return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
 
 /* Phone handling: stored numbers are always either '' (blank allowed) or a
    validated 10-digit Indian mobile number prefixed as '+91XXXXXXXXXX' — the
@@ -748,13 +727,21 @@ function startFirestoreSync(){
      start once signed in like everything else here. */
   window.fsOnSnapshotGroup('items', (arr) => {
     DB.guestRequests = arr;
+    reconcileGuestRequestBookings();
     render();
   });
+  if(typeof window.fsOnDoc === 'function'){
+    window.fsOnDoc('settings', 'reception', (docData) => {
+      DB.receptionOrderlies = (docData && Array.isArray(docData.orderlies)) ? docData.orderlies : [];
+      render();
+    });
+  }
 }
 function onFirestoreDataChanged(){
   if(allCoreDataLoaded()){
     const loadingScreen = document.getElementById('dataLoadingScreen');
     if(loadingScreen) loadingScreen.classList.add('hidden');
+    reconcileGuestRequestBookings();
   }
   render();
 }
@@ -766,8 +753,69 @@ function persistRoom(r){ const { id, ...data } = r; return window.fsSetDoc('room
 function persistBlock(bl){ const { id, ...data } = bl; return window.fsSetDoc('blocks', id, data).catch(err=>console.error('Block save failed', err)); }
 function persistAuditEntry(entry){ const { id, ...data } = entry; return window.fsSetDoc('auditLog', id, data).catch(err=>console.error('Audit log save failed', err)); }
 
-function logAudit(action, detail){
-  const entry = { id: uid('log'), action, detail, role: state.role, ts: new Date().toISOString() };
+const releasingRequestIds = new Set();
+function requestNeedsBookingRelease(req){
+  if(req.bookingsReleasedAt) return false;
+  const ids = req.resultingBookingIds || [];
+  if(!ids.length) return false;
+  const live = ids.map(id => DB.bookings.find(b => b.id === id)).filter(b => b && isActiveBooking(b));
+  if(!live.length) return false;
+  if(req.status === 'cancelled') return true;
+  if(req.status === 'pending' && req.previousStatus === 'approved') return true;
+  return false;
+}
+function reconcileGuestRequestBookings(){
+  if(!dataLoaded.bookings || typeof window.fsCommitBatch !== 'function') return;
+  let releasedAny = false;
+  (DB.guestRequests || []).forEach(req => {
+    if(!req.phone || releasingRequestIds.has(req.id)) return;
+    if(!requestNeedsBookingRelease(req)) return;
+    releasingRequestIds.add(req.id);
+    const ops = [];
+    (req.resultingBookingIds || []).forEach(id => {
+      const b = DB.bookings.find(x => x.id === id);
+      if(!b || !isActiveBooking(b)) return;
+      b.status = 'cancelled';
+      const { id: bid, ...data } = b;
+      ops.push({ kind: 'set', path: ['bookings', bid], data });
+    });
+    const patch = {
+      bookingsReleasedAt: new Date().toISOString(),
+      allocatedRooms: [],
+    };
+    ops.push({ kind: 'update', path: ['bookingRequests', req.phone, 'items', req.id], data: patch });
+    req.bookingsReleasedAt = patch.bookingsReleasedAt;
+    req.allocatedRooms = [];
+    if(!ops.length){
+      releasingRequestIds.delete(req.id);
+      return;
+    }
+    releasedAny = true;
+    window.fsCommitBatch(ops).then(() => {
+      logAudit(`released rooms for ${req.contactName} after the guest cancelled or re-edited an approved request`);
+      render();
+    }).catch(err => {
+      console.error('Release linked bookings failed', err);
+      req.bookingsReleasedAt = null;
+    }).finally(() => {
+      releasingRequestIds.delete(req.id);
+    });
+  });
+  if(releasedAny) showToast('Guest cancelled or re-edited — linked rooms released');
+}
+
+function stayRangeText(start, end){
+  const arr = start ? `${fmtShort(start)} (Arrival)` : '—';
+  const dep = end ? `${fmtShort(end)} (Departure)` : 'open-ended (no departure)';
+  return `from ${arr} to ${dep}`;
+}
+function allotText(roomLbl, name, start, end){
+  return `allotted room ${roomLbl} to ${name} ${stayRangeText(start, end)}`;
+}
+function logAudit(sentence){
+  const clean = (sentence || '').trim();
+  const detail = clean.startsWith(state.role) ? clean : `${state.role} ${clean}`;
+  const entry = { id: uid('log'), action: 'event', detail, role: state.role, ts: new Date().toISOString() };
   DB.auditLog.unshift(entry);
   DB.auditLog = DB.auditLog.slice(0, 200);
   persistAuditEntry(entry);
@@ -798,9 +846,11 @@ const state = {
      become available to check room availability across it. */
   filterFrom: '',
   filterTo: '',
+  movementDate: todayISO(),
   movementFilter: 'all',
   recordsSearch: '',
   recordsStatusFilter: 'all',
+  auditSearch: '',
   waBookingId: null,
   /* Draft room allocations for the Requests tab — keyed by request id, an
      array parallel to that request's rooms[]. Nothing here is booked until
@@ -810,6 +860,7 @@ const state = {
   rejectingId: null,
   requestsStatusFilter: 'pending',
   expandedRequestIds: {},
+  expandedMovementIds: {},
 };
 /* Staged room periods for a NEW multi-room stay being composed in the
    booking modal (cleared once the booking is saved or the modal reopened). */
@@ -955,6 +1006,62 @@ function showToast(msg, tone){
   setTimeout(()=>{ el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(),300); }, 2600);
 }
 
+window.showConnBanner = function(msg){
+  const el = document.getElementById('connBanner');
+  if(!el) return;
+  if(!msg){ el.classList.remove('is-on'); el.textContent = ''; return; }
+  el.textContent = msg;
+  el.classList.add('is-on');
+};
+window.addEventListener('offline', ()=> window.showConnBanner('You are offline. Check your connection — changes will sync when you are back online.'));
+window.addEventListener('online', ()=> window.showConnBanner(''));
+
+const MODAL_CLOSE = {
+  bookingModal: () => closeBookingModal(),
+  detailModal: () => closeDetailModal(),
+  waModal: () => closeWaModal(),
+  roomModal: () => closeRoomModal(),
+  roleSheet: () => closeRoleSheet(),
+};
+function openModals(){
+  return Object.keys(MODAL_CLOSE).map(id => document.getElementById(id)).filter(el => el && !el.classList.contains('hidden'));
+}
+function modalFocusables(root){
+  return [...root.querySelectorAll('a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled])')].filter(el => {
+    let node = el;
+    while(node && node !== root){
+      if(node.classList && node.classList.contains('hidden')) return false;
+      node = node.parentElement;
+    }
+    return true;
+  });
+}
+function focusModal(id){
+  const root = document.getElementById(id);
+  if(!root) return;
+  requestAnimationFrame(() => {
+    const items = modalFocusables(root);
+    if(items.length) items[0].focus();
+  });
+}
+document.addEventListener('keydown', (e) => {
+  const open = openModals();
+  if(!open.length) return;
+  const modal = open[open.length-1];
+  if(e.key === 'Escape'){
+    e.preventDefault();
+    const closer = MODAL_CLOSE[modal.id];
+    if(closer) closer();
+    return;
+  }
+  if(e.key !== 'Tab') return;
+  const items = modalFocusables(modal);
+  if(!items.length) return;
+  const first = items[0], last = items[items.length-1];
+  if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+});
+
 /* =========================================================================
    ROLE SHEET
    Role and login identity are now the same thing: each role maps to a
@@ -991,6 +1098,7 @@ function openRoleSheet(){
     ? `<span class="text-[11px] text-mess-400">Signed in as <span class="font-medium text-mess-600">${currentAuthUser.email}</span></span>`
     : '';
   document.getElementById('roleSheet').classList.remove('hidden');
+  focusModal('roleSheet');
 }
 function closeRoleSheet(){ document.getElementById('roleSheet').classList.add('hidden'); }
 /* Replaces the role sheet's content with a password prompt for the
@@ -1057,17 +1165,24 @@ const TABS = [
   { id:'records',    label:'Records',   icon:'&#9776;' },
   { id:'admin',      label:'Admin',     icon:'&#9881;' },
 ];
+function pendingRequestCount(){
+  return (DB.guestRequests||[]).filter(r=>r.status==='pending').length;
+}
 function renderChrome(){
   document.getElementById('roleLabel').textContent = state.role;
   const tabs = TABS.filter(t => (t.id!=='admin' && t.id!=='requests') || isAdmin(state.role));
 
+  const pendingN = pendingRequestCount();
   const nav = document.getElementById('bottomNav');
-  nav.className = `grid grid-cols-${tabs.length} text-[10px]`;
+  nav.className = 'grid text-[10px]';
+  nav.style.gridTemplateColumns = `repeat(${tabs.length}, minmax(0, 1fr))`;
   nav.innerHTML = tabs.map(t => {
     const active = state.tab===t.id;
+    const badge = (t.id==='requests' && pendingN) ? `<span class="absolute top-1 right-1/2 translate-x-3 min-w-[16px] h-4 px-1 rounded-full bg-brass-500 text-white text-[9px] font-bold leading-4">${pendingN>99?'99+':pendingN}</span>` : '';
     return `
       <button onclick="setTab('${t.id}')" class="relative flex flex-col items-center justify-center gap-0.5 py-2.5 ${active?'tab-active':'tab-inactive'}">
         <span class="text-lg leading-none">${t.icon}</span>
+        ${badge}
         <span class="font-medium">${t.label}</span>
         ${active?'<span class="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-mess-700"></span>':''}
       </button>`;
@@ -1079,10 +1194,12 @@ function renderChrome(){
   if(sidebar){
     sidebar.innerHTML = tabs.map(t => {
       const active = state.tab===t.id;
+      const badge = (t.id==='requests' && pendingN) ? `<span class="ml-auto text-[10px] font-bold bg-brass-500 text-white rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">${pendingN>99?'99+':pendingN}</span>` : '';
       return `
         <button onclick="setTab('${t.id}')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium mb-1 text-left ${active ? 'bg-mess-50 text-mess-800' : 'text-mess-500 hover:bg-mess-50/60 hover:text-mess-700'}">
           <span class="text-base leading-none w-5 text-center ${active?'text-mess-700':'text-mess-400'}">${t.icon}</span>
           <span>${t.label}</span>
+          ${badge}
         </button>`;
     }).join('') + `
       <div class="mt-auto pt-3 border-t border-mess-100">
@@ -1122,14 +1239,17 @@ function render(){
      filters) — that's a signal the view should re-center on today, not
      keep wherever the old (possibly filtered/narrower) grid happened to
      be scrolled to. */
-  if(state.tab==='gantt' && state._pendingScrollLeft===undefined && state.ganttInitScrolled){
+  const skipGanttRebuild = state.tab==='gantt' && ganttUserScrolling && state._pendingScrollLeft===undefined && state.ganttInitScrolled;
+  if(!skipGanttRebuild && state.tab==='gantt' && state._pendingScrollLeft===undefined && state.ganttInitScrolled){
     const el = document.getElementById('ganttScroll');
     if(el) state._pendingScrollLeft = el.scrollLeft;
   }
   renderChrome();
   const c = document.getElementById('app-content');
   if(state.tab==='dashboard') c.innerHTML = renderDashboard();
-  else if(state.tab==='gantt') c.innerHTML = renderGantt();
+  else if(state.tab==='gantt'){
+    if(!skipGanttRebuild) c.innerHTML = renderGantt();
+  }
   else if(state.tab==='movement') c.innerHTML = renderMovement();
   else if(state.tab==='requests') c.innerHTML = renderRequests();
   else if(state.tab==='records') c.innerHTML = renderRecords();
@@ -1165,6 +1285,7 @@ function goToCategoryGantt(catKey){
 function goToMovement(filter){
   state.tab = 'movement';
   state.movementFilter = filter;
+  state.movementDate = todayISO();
   render(); scrollContentToTop();
 }
 
@@ -1234,6 +1355,7 @@ function renderDashboard(){
           <button onclick="goToMovement('arrivals')" class="text-left active:opacity-60"><span class="font-mono-num font-semibold text-brass-300">${arrivals.length}</span> arrivals today</button>
           <button onclick="goToMovement('departures')" class="text-left active:opacity-60"><span class="font-mono-num font-semibold text-brass-300">${departures.length}</span> departures today</button>
         </div>
+        ${isAdmin(state.role) ? `<button onclick="setTab('requests')" class="mt-2 text-left text-xs text-brass-300 active:opacity-60"><span class="font-mono-num font-semibold">${pendingRequestCount()}</span> pending guest request${pendingRequestCount()===1?'':'s'}</button>` : ''}
       </div>
     </div>
 
@@ -1419,7 +1541,7 @@ function renderGantt(){
           const isEnd = iso===lastOccupiedNight(b);
           return `<button onclick="onGanttCellClick('${room.id}','${iso}')"
               class="gantt-cell w-10 h-9 shrink-0 border-r border-b border-mess-100 flex items-center justify-center relative"
-              title="${b.guestName}${b.stayGroupId?' (multi-room stay)':''}">
+              title="${escapeHtml(b.guestName)}${b.stayGroupId?' (multi-room stay)':''}">
             <span class="absolute inset-y-1 ${isStart?'left-0.5 rounded-l':'left-0'} ${isEnd?'right-0.5 rounded-r':'right-0'}"
               style="background:${meta.color}; opacity:0.9"></span>
           </button>`;
@@ -1429,7 +1551,7 @@ function renderGantt(){
         const m2 = CATEGORY_META[categoryKeyFor(room,b2)];
         return `<button onclick="onGanttCellClick('${room.id}','${iso}')"
             class="gantt-cell w-10 h-9 shrink-0 border-r border-b border-mess-100 relative flex flex-col overflow-hidden"
-            title="${b1.guestName} & ${b2.guestName} (sharing)">
+            title="${escapeHtml(b1.guestName)} &amp; ${escapeHtml(b2.guestName)} (sharing)">
           <span class="flex-1" style="background:${m1.color}; opacity:0.85"></span>
           <span class="flex-1 border-t border-white/60" style="background:${m2.color}; opacity:0.85"></span>
         </button>`;
@@ -1533,13 +1655,14 @@ function openSharedCellChooser(bks){
       const room=getRoom(b.roomId); const meta=CATEGORY_META[categoryKeyFor(room,b)];
       return `<button onclick="openDetailModal('${b.id}')" class="w-full text-left flex items-center gap-2 bg-mess-50 rounded-lg px-3 py-2">
         <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${meta.color}"></span>
-        <div class="flex-1 min-w-0"><div class="text-xs font-semibold text-mess-800 truncate">${b.guestName}</div><div class="text-[11px] text-mess-500">${fmtShort(b.startDate)} – ${fmtEndDateShort(b.endDate)}</div></div>
+        <div class="flex-1 min-w-0"><div class="text-xs font-semibold text-mess-800 truncate">${escapeHtml(b.guestName)}</div><div class="text-[11px] text-mess-500">${fmtShort(b.startDate)} – ${fmtEndDateShort(b.endDate)}</div></div>
       </button>`;
     }).join('')}
     </div>
     <button onclick="closeDetailModal()" class="w-full mt-3 py-2.5 rounded-xl border border-mess-200 text-mess-700 text-xs font-semibold">Close</button>
   `;
   document.getElementById('detailModal').classList.remove('hidden');
+  focusModal('detailModal');
 }
 
 /* Duration filter — when both dates are set, the scrollable grid itself is
@@ -1601,6 +1724,9 @@ function slideGanttPeriod(deltaMonths, el){
   render();
 }
 
+let ganttUserScrolling = false;
+let ganttSlideLockUntil = 0;
+let ganttScrollIdleTimer = 0;
 function attachGanttScrollSync(){
   const el = document.getElementById('ganttScroll');
   if(!el) return;
@@ -1621,24 +1747,24 @@ function attachGanttScrollSync(){
       requestAnimationFrame(()=>{ el.scrollLeft = target; });
     }
   }
-  /* While a duration filter is active the grid is locked to exactly that
-     range — no edge-triggered month sliding (native scroll still works
-     within it if it's wider than the screen). */
-  if(filtered) return;
-  let sliding = false;
-  const threshold = 320;
+  if(el.dataset.ganttBound) return;
+  el.dataset.ganttBound = '1';
   el.addEventListener('scroll', () => {
-    if(sliding) return;
-    const nearRight = el.scrollLeft + el.clientWidth > el.scrollWidth - threshold;
-    const nearLeft = el.scrollLeft < threshold;
-    if(nearRight){
-      sliding = true;
+    ganttUserScrolling = true;
+    clearTimeout(ganttScrollIdleTimer);
+    ganttScrollIdleTimer = setTimeout(()=>{ ganttUserScrolling = false; }, 200);
+    if(filtered) return;
+    if(Date.now() < ganttSlideLockUntil) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if(maxScroll <= 8) return;
+    const atRight = el.scrollLeft >= maxScroll - 8;
+    const atLeft = el.scrollLeft <= 8;
+    if(atRight){
+      ganttSlideLockUntil = Date.now() + 700;
       slideGanttPeriod(1, el);
-      requestAnimationFrame(()=>{ sliding = false; });
-    } else if(nearLeft){
-      sliding = true;
+    } else if(atLeft){
+      ganttSlideLockUntil = Date.now() + 700;
       slideGanttPeriod(-1, el);
-      requestAnimationFrame(()=>{ sliding = false; });
     }
   }, { passive: true });
 }
@@ -1783,6 +1909,7 @@ function openBookingModal(roomId, dateISO, editId, inheritFrom){
   }
 
   document.getElementById('bookingModal').classList.remove('hidden');
+  focusModal('bookingModal');
 }
 function closeBookingModal(){ document.getElementById('bookingModal').classList.add('hidden'); }
 
@@ -1942,7 +2069,7 @@ function syncSecondOccupant(roomId, category, sharingChecked){
     if(existingId){
       const sib = DB.bookings.find(x=>x.id===existingId);
       if(sib){ sib.status = 'cancelled'; persistBooking(sib); }
-      logAudit('booking_cancelled', 'Second occupant removed from shared room');
+      logAudit(`cancelled sharing booking for the second occupant in ${roomLabel(getRoom(roomId))}`);
     }
     return;
   }
@@ -1965,7 +2092,7 @@ function syncSecondOccupant(roomId, category, sharingChecked){
       if(msg){ showToast('Second occupant not updated — ' + msg, 'warn'); return; }
       Object.assign(sib, { roomId, category, startDate: start2, endDate: end2, startTime: startTime2, endTime: endTime2, guestPhone: phone2, guestName: guestName2, sharing: true });
       persistBooking(sib);
-      logAudit('booking_edited', `${guestName2} (sharing partner) updated`);
+      logAudit(`updated sharing booking: ${allotText(roomLabel(getRoom(roomId)), guestName2, start2, end2)}`);
       return;
     }
   }
@@ -1980,7 +2107,7 @@ function syncSecondOccupant(roomId, category, sharingChecked){
   };
   DB.bookings.push(sibBooking);
   persistBooking(sibBooking);
-  logAudit('booking_created', `${guestName2} → ${roomLabel(room)} (${start2} to ${end2}) [sharing partner]`);
+  logAudit(`confirmed sharing booking: ${allotText(roomLabel(room), guestName2, start2, end2)}`);
 }
 
 function saveBooking(ev){
@@ -2033,6 +2160,14 @@ function saveBooking(ev){
     if(conflictMsg){ errBox.textContent = conflictMsg; errBox.classList.remove('hidden'); return; }
     const b = DB.bookings.find(x=>x.id===editingId);
     const wasCancelled = b.status === 'cancelled';
+    const oldRoom = getRoom(b.roomId);
+    const oldRoomLabel = roomLabel(oldRoom);
+    const newRoomLabel = roomLabel(room);
+    const changes = [];
+    if(oldRoomLabel !== newRoomLabel) changes.push(`room changed ${oldRoomLabel} → ${newRoomLabel}`);
+    if(b.startDate !== startDate || b.endDate !== endDate) changes.push(`dates changed ${stayRangeText(b.startDate, b.endDate)} → ${stayRangeText(startDate, endDate)}`);
+    if(b.guestName !== guestName) changes.push(`name changed ${b.guestName} → ${guestName}`);
+    if(b.category !== category) changes.push(`purpose changed ${(CATEGORY_META[b.category]||{}).label || b.category} → ${(CATEGORY_META[category]||{}).label || category}`);
     Object.assign(b, { roomId, roomTypeAtBooking: room.type, guestName, category, startDate, endDate, startTime, endTime, guestPhone, sharing, remarks });
     if(wasCancelled) b.status = 'confirmed';
     persistBooking(b);
@@ -2043,7 +2178,13 @@ function saveBooking(ev){
       });
     }
     syncSecondOccupant(roomId, category, sharing);
-    logAudit(wasCancelled ? 'booking_restored' : 'booking_edited', `${guestName} · ${roomLabel(room)} (${startDate} to ${endDate})${wasCancelled?' [restored]':''}`);
+    if(wasCancelled){
+      logAudit(`restored booking: ${allotText(newRoomLabel, guestName, startDate, endDate)}`);
+    } else if(changes.length){
+      logAudit(`updated booking for ${guestName}: ${changes.join('; ')}`);
+    } else {
+      logAudit(`updated booking: ${allotText(newRoomLabel, guestName, startDate, endDate)}`);
+    }
     closeBookingModal(); render();
     showToast(wasCancelled ? 'Booking restored and updated' : 'Booking updated');
     return;
@@ -2061,7 +2202,7 @@ function saveBooking(ev){
     DB.bookings.push(newBooking);
     persistBooking(newBooking);
     syncSecondOccupant(roomId, category, sharing);
-    logAudit('booking_created', `${guestName} → ${roomLabel(room)} (${startDate} to ${endDate}) [stay segment]`);
+    logAudit(`added room period: ${allotText(roomLabel(room), guestName, startDate, endDate)}`);
     closeBookingModal(); render();
     showToast('Room period added to stay');
     return;
@@ -2080,7 +2221,10 @@ function saveBooking(ev){
      arrival/departure dates independent of the primary occupant's. */
   syncSecondOccupant(roomId, category, sharing);
 
-  logAudit('booking_created', `${guestName} → stay across ${allSegments.length} room period(s)`);
+  const first = allSegments[0];
+  const last = allSegments[allSegments.length-1];
+  const firstRoom = getRoom(first.roomId);
+  logAudit(`confirmed booking: ${allotText(roomLabel(firstRoom), guestName, first.startDate, last.endDate)}${allSegments.length>1 ? ` (${allSegments.length} room periods)` : ''}`);
   draftSegments = [];
   closeBookingModal();
   render();
@@ -2110,7 +2254,7 @@ function openDetailModal(bookingId){
       ${segments.length>1?`<span class="text-[10px] bg-mess-100 text-mess-700 px-2 py-0.5 rounded-full font-medium">${segments.length}-room stay</span>`:''}
       ${b.status!=='confirmed' ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-medium ml-auto" style="background:${BOOKING_STATUS_META[b.status].bg};color:${BOOKING_STATUS_META[b.status].color}">${BOOKING_STATUS_META[b.status].label}</span>` : ''}
     </div>
-    <div class="font-display text-lg font-semibold text-mess-900">${primary.guestName}</div>
+    <div class="font-display text-lg font-semibold text-mess-900">${escapeHtml(primary.guestName)}</div>
     <div class="text-sm text-mess-600 mb-3">${fmtShort(overallStart)} – ${fmtEndDateShort(overallEnd)} overall stay</div>
 
     <div class="space-y-2 mb-3">
@@ -2131,7 +2275,7 @@ function openDetailModal(bookingId){
           <span class="w-2 h-2 rounded-full shrink-0" style="background:${meta.color}"></span>
           <div class="flex-1 min-w-0">
             <div class="text-xs font-semibold text-mess-800 truncate">${roomLabel(room)}${seg.sharing?' · sharing':''}</div>
-            <div class="text-[11px] text-mess-500">${dateRange} &middot; ${meta.label}${stampParts.length?' &middot; '+stampParts.join(', '):''}${partner?' &middot; with '+partner.guestName:''}</div>
+            <div class="text-[11px] text-mess-500">${dateRange} &middot; ${meta.label}${stampParts.length?' &middot; '+stampParts.join(', '):''}${partner?' &middot; with '+escapeHtml(partner.guestName):''}</div>
           </div>
           ${isLive ? `
             <button onclick="editBooking('${seg.id}')" class="text-[10px] font-semibold text-brass-700 shrink-0 px-1">Edit</button>
@@ -2159,7 +2303,7 @@ function openDetailModal(bookingId){
     ${primary.remarks ? `
     <div class="bg-mess-50 rounded-lg px-3 py-2 mb-3 text-xs">
       <div class="text-mess-400">Remarks</div>
-      <div class="font-medium text-mess-800 whitespace-pre-wrap">${primary.remarks}</div>
+      <div class="font-medium text-mess-800 whitespace-pre-wrap">${escapeHtml(primary.remarks)}</div>
     </div>` : ''}
 
     ${isActiveBooking(b) ? `
@@ -2170,6 +2314,7 @@ function openDetailModal(bookingId){
     <button onclick="closeDetailModal()" class="w-full py-2.5 rounded-xl border border-mess-200 text-mess-700 text-xs font-semibold">Close</button>
   `;
   document.getElementById('detailModal').classList.remove('hidden');
+  focusModal('detailModal');
 }
 function closeDetailModal(){ document.getElementById('detailModal').classList.add('hidden'); }
 function editBooking(id){ closeDetailModal(); openBookingModal(null, null, id); }
@@ -2185,7 +2330,7 @@ function cancelBooking(id){
   if(!b) return;
   b.status = 'cancelled';
   persistBooking(b);
-  logAudit('booking_cancelled', `${b.guestName} · ${roomLabel(getRoom(b.roomId))}`);
+  logAudit(`cancelled booking for ${b.guestName} in ${roomLabel(getRoom(b.roomId))} ${stayRangeText(b.startDate, b.endDate)}`);
   closeDetailModal(); render();
   showToast('Booking cancelled');
 }
@@ -2203,7 +2348,7 @@ function restoreBooking(id){
   }
   b.status = 'confirmed';
   persistBooking(b);
-  logAudit('booking_restored', `${b.guestName} · ${roomLabel(getRoom(b.roomId))}`);
+  logAudit(`restored booking: ${allotText(roomLabel(getRoom(b.roomId)), b.guestName, b.startDate, b.endDate)}`);
   render();
   openDetailModal(id);
   showToast('Booking restored');
@@ -2213,39 +2358,70 @@ function restoreBooking(id){
    DAILY MOVEMENT SHEET
    ========================================================================= */
 function renderMovement(){
-  const today = todayISO();
-  let arrivals = DB.bookings.filter(b=>b.startDate===today && isActiveBooking(b));
-  let departures = DB.bookings.filter(b=>b.endDate===today && isActiveBooking(b));
+  const day = state.movementDate || todayISO();
+  let arrivals = DB.bookings.filter(b=>b.startDate===day && isActiveBooking(b));
+  let departures = DB.bookings.filter(b=>b.endDate===day && isActiveBooking(b));
   if(state.movementFilter==='arrivals') departures=[];
   if(state.movementFilter==='departures') arrivals=[];
+  const isToday = day === todayISO();
+  const emptyArr = isToday ? 'No arrivals scheduled today.' : `No arrivals on ${fmtLong(day)}.`;
+  const emptyDep = isToday ? 'No departures scheduled today.' : `No departures on ${fmtLong(day)}.`;
 
   function row(b, kind){
     const room = getRoom(b.roomId);
     const catKey = categoryKeyFor(room, b);
     const done = kind==='arrival' ? b.checkedIn : b.checkedOut;
     const timeLabel = kind==='arrival' ? formatTimeShort(b.startTime, DEFAULT_CHECKIN_TIME) : formatTimeShort(b.endTime, DEFAULT_CHECKOUT_TIME);
+    const expandKey = b.id + '_' + kind;
+    const expanded = !!state.expandedMovementIds[expandKey];
+    const partner = b.sharing ? findShareSibling(b) : null;
+    const groupSegs = b.stayGroupId
+      ? DB.bookings.filter(x=>x.stayGroupId===b.stayGroupId && isActiveBooking(x)).sort((a,c)=>a.startDate.localeCompare(c.startDate))
+      : [];
+    const stayLine = b.endDate
+      ? `${fmtShort(b.startDate)} ${formatTimeShort(b.startTime, DEFAULT_CHECKIN_TIME)} – ${fmtShort(b.endDate)} ${formatTimeShort(b.endTime, DEFAULT_CHECKOUT_TIME)}`
+      : `${fmtShort(b.startDate)} ${formatTimeShort(b.startTime, DEFAULT_CHECKIN_TIME)} – Ongoing`;
+    const chipLabel = roomFullNumber(room);
     return `
-      <div class="bg-white rounded-xl border border-mess-100 p-3 flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-mono-num font-semibold shrink-0"
-             style="background:${CATEGORY_META[catKey].bg}; color:${CATEGORY_META[catKey].color}">
-          ${room.type==='vip' ? 'VIP' : room.roomNo}
+      <div class="bg-white rounded-xl border border-mess-100 p-3">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="toggleMovementExpanded('${expandKey}')">
+          <div class="h-9 px-1.5 rounded-lg flex items-center justify-center text-[10px] font-mono-num font-semibold shrink-0 text-center leading-tight"
+               style="background:${CATEGORY_META[catKey].bg}; color:${CATEGORY_META[catKey].color}; min-width:3.25rem">
+            ${escapeHtml(chipLabel)}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-mess-900 truncate">${escapeHtml(b.guestName)}${b.sharing?' <span class=\"text-[10px] text-mess-400\">(sharing)</span>':''}</div>
+            <div class="text-[11px] text-mess-500">${escapeHtml(roomFullNumber(room))} &middot; ${CATEGORY_META[catKey].label} &middot; ${timeLabel}${b.stayGroupId?' &middot; multi-room stay':''}</div>
+          </div>
+          <span class="text-mess-400 text-xs shrink-0 ${expanded?'accordion-open':''}"><span class="chev inline-block transition-transform">&#9656;</span></span>
+          <button onclick="event.stopPropagation(); toggleMovement('${b.id}','${kind}')"
+            class="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold ${done? 'bg-mess-700 text-white' : 'bg-mess-50 text-mess-600 border border-mess-200'}">
+            ${done ? (kind==='arrival'?'Checked in':'Checked out') : (kind==='arrival'?'Check in':'Check out')}
+          </button>
         </div>
-        <div class="flex-1 min-w-0">
-          <div class="text-sm font-medium text-mess-900 truncate">${b.guestName}${b.sharing?' <span class=\"text-[10px] text-mess-400\">(sharing)</span>':''}</div>
-          <div class="text-[11px] text-mess-500">${roomLabel(room)} &middot; ${CATEGORY_META[catKey].label} &middot; ${timeLabel}${b.stayGroupId?' &middot; multi-room stay':''}</div>
-        </div>
-        <button onclick="toggleMovement('${b.id}','${kind}')"
-          class="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold ${done? 'bg-mess-700 text-white' : 'bg-mess-50 text-mess-600 border border-mess-200'}">
-          ${done ? (kind==='arrival'?'Checked in':'Checked out') : (kind==='arrival'?'Check in':'Check out')}
-        </button>
+        ${expanded ? `
+        <div class="mt-2.5 pt-2.5 border-t border-mess-100 text-[11px] text-mess-700 space-y-1.5">
+          <div><span class="text-mess-400">Room:</span> ${escapeHtml(roomLabel(room))}</div>
+          <div><span class="text-mess-400">Stay:</span> ${stayLine}</div>
+          <div><span class="text-mess-400">Contact:</span> ${formatPhoneDisplay(b.guestPhone)}</div>
+          <div><span class="text-mess-400">Booked by:</span> ${escapeHtml(b.createdBy || '—')}</div>
+          ${partner ? `<div><span class="text-mess-400">Sharing with:</span> ${escapeHtml(partner.guestName)}</div>` : ''}
+          ${b.remarks ? `<div><span class="text-mess-400">Remarks:</span> <span class="whitespace-pre-wrap">${escapeHtml(b.remarks)}</span></div>` : ''}
+          ${groupSegs.length>1 ? `<div class="pt-1"><span class="text-mess-400">Other rooms in this stay:</span><div class="mt-1 space-y-0.5">${groupSegs.map(seg=>`<div>${escapeHtml(roomLabel(getRoom(seg.roomId)))} &middot; ${fmtShort(seg.startDate)} – ${fmtEndDateShort(seg.endDate)}</div>`).join('')}</div></div>` : ''}
+          <div class="text-mess-400 pt-0.5">${b.checkedIn?'Checked in':(kind==='arrival'?'Not yet checked in':'—')} &middot; ${b.checkedOut?'Checked out':(kind==='departure'?'Not yet checked out':'—')}</div>
+        </div>` : ''}
       </div>`;
   }
 
   return `
   <div class="px-4 lg:px-6 pt-4 lg:pt-6 space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between gap-2">
       <div class="font-display uppercase text-sm font-semibold text-mess-800">Daily Movement Sheet</div>
-      <div class="text-xs text-mess-500 font-mono-num">${fmtLong(today)}</div>
+      <div class="flex items-center gap-1">
+        <button type="button" onclick="shiftMovementDate(-1)" class="w-8 h-8 rounded-lg border border-mess-200 text-mess-700 text-sm">‹</button>
+        <input type="date" value="${day}" onchange="setMovementDate(this.value)" class="border border-mess-200 rounded-lg px-2 py-1.5 text-[11px] font-mono-num bg-white">
+        <button type="button" onclick="shiftMovementDate(1)" class="w-8 h-8 rounded-lg border border-mess-200 text-mess-700 text-sm">›</button>
+      </div>
     </div>
 
     <div class="flex gap-1.5">
@@ -2262,25 +2438,39 @@ function renderMovement(){
       ${state.movementFilter!=='departures' ? `
       <div class="${colClass}">
         <div class="text-xs font-semibold text-mess-500 mb-2">Arrivals (${arrivals.length})</div>
-        <div class="space-y-2">${arrivals.map(b=>row(b,'arrival')).join('') || '<div class="text-xs text-mess-400 px-1">No arrivals scheduled today.</div>'}</div>
+        <div class="space-y-2">${arrivals.map(b=>row(b,'arrival')).join('') || `<div class="text-xs text-mess-400 px-1">${emptyArr}</div>`}</div>
       </div>` : ''}
 
       ${state.movementFilter!=='arrivals' ? `
       <div class="${colClass}">
         <div class="text-xs font-semibold text-mess-500 mb-2">Departures (${departures.length})</div>
-        <div class="space-y-2">${departures.map(b=>row(b,'departure')).join('') || '<div class="text-xs text-mess-400 px-1">No departures scheduled today.</div>'}</div>
+        <div class="space-y-2">${departures.map(b=>row(b,'departure')).join('') || `<div class="text-xs text-mess-400 px-1">${emptyDep}</div>`}</div>
       </div>` : ''}
     </div>`;
     })()}
   </div>`;
 }
 function setMovementFilter(f){ state.movementFilter = f; render(); }
+function setMovementDate(iso){ if(iso){ state.movementDate = iso; render(); } }
+function toggleMovementExpanded(key){
+  state.expandedMovementIds[key] = !state.expandedMovementIds[key];
+  render();
+}
+function shiftMovementDate(delta){
+  state.movementDate = toISO(addDays(fromISO(state.movementDate || todayISO()), delta));
+  render();
+}
 function toggleMovement(id, kind){
   const b = DB.bookings.find(x=>x.id===id);
   if(!b) return;
   if(kind==='arrival') b.checkedIn = !b.checkedIn; else b.checkedOut = !b.checkedOut;
   persistBooking(b);
-  logAudit(kind==='arrival'?'check_in_toggled':'check_out_toggled', `${b.guestName} → ${(kind==='arrival'?b.checkedIn:b.checkedOut)}`);
+  const room = getRoom(b.roomId);
+  if(kind==='arrival'){
+    logAudit(`${b.checkedIn ? 'checked in' : 'undid check-in for'} ${b.guestName} in ${roomLabel(room)} ${stayRangeText(b.startDate, b.endDate)}`);
+  } else {
+    logAudit(`${b.checkedOut ? 'checked out' : 'undid check-out for'} ${b.guestName} in ${roomLabel(room)} ${stayRangeText(b.startDate, b.endDate)}`);
+  }
   render();
 }
 /* =========================================================================
@@ -2292,14 +2482,14 @@ function openWaModal(bookingId){
   const room = getRoom(b.roomId);
   state.waBookingId = bookingId;
   const catShort = CATEGORY_SHORT[categoryKeyFor(room,b)] || CATEGORY_META[categoryKeyFor(room,b)].label;
-  const orderlyLines = RECEPTION_ORDERLIES.map(o=>`${o.name}     ${o.phone}`).join('\n');
+  const orderlyLines = receptionOrderlies().map(o=>`${o.name}     ${o.phone}`).join('\n');
   const depLine = b.endDate
     ? `- Dep Date - ${fmtDMY2(b.endDate)} & ${formatTimeHrs(b.endTime, DEFAULT_CHECKOUT_TIME)}`
     : `- Living-in — no departure date; stays until posted out`;
   const msg =
 `Dear Sir/Ma'am,
 
-Your Accomodation booking is confirmed at Officers' Mess, Air Force Academy as per details given below:-
+Your Accommodation booking is confirmed at Officers' Mess, Air Force Academy as per details given below:-
 
 ${b.guestName}
 
@@ -2319,6 +2509,7 @@ Officers Mess, AFA`;
   document.getElementById('waText').value = msg;
   updateWaLink();
   document.getElementById('waModal').classList.remove('hidden');
+  focusModal('waModal');
 }
 function updateWaLink(){
   const text = document.getElementById('waText').value;
@@ -2511,6 +2702,10 @@ function approveRequest(reqId){
   const all = loadGuestRequests();
   const req = all.find(r=>r.id===reqId);
   if(!req) return;
+  if(!req.phone){
+    showToast('Cannot approve — this request has no phone path.', 'error');
+    return;
+  }
   const allocations = state.requestAllocations[reqId] || [];
 
   if(allocations.length < req.rooms.length || allocations.some(a=>!a || !a.roomId)){
@@ -2528,6 +2723,8 @@ function approveRequest(reqId){
 
   const requestGroupId = allocations.length>1 ? uid('reqgrp') : null;
   const resultingBookingIds = [];
+  const allocatedRooms = [];
+  const ops = [];
   allocations.forEach((a, i)=>{
     const askRoom = req.rooms[i];
     const room = getRoom(a.roomId);
@@ -2548,29 +2745,58 @@ function approveRequest(reqId){
       status: 'confirmed', checkedIn:false, checkedOut:false,
       createdBy: state.role, createdAt: new Date().toISOString(),
     };
-    DB.bookings.push(booking);
-    persistBooking(booking);
+    const { id, ...data } = booking;
+    ops.push({ kind: 'set', path: ['bookings', id], data });
     resultingBookingIds.push(booking.id);
+    allocatedRooms.push({
+      bookingId: booking.id,
+      label: roomLabel(room),
+      startDate: a.startDate,
+      endDate: a.endDate,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+    });
   });
+
+  const receptionContacts = receptionOrderlies().map(o => ({ name: o.name, phone: o.phone }));
 
   const decidedAt = new Date().toISOString();
-  updateGuestRequest(req, {
-    status: 'approved',
-    resultingBookingIds,
-    decidedAt,
-    decidedBy: state.role,
+  ops.push({
+    kind: 'update',
+    path: ['bookingRequests', req.phone, 'items', req.id],
+    data: {
+      status: 'approved',
+      resultingBookingIds,
+      allocatedRooms,
+      receptionContacts,
+      decidedAt,
+      decidedBy: state.role,
+      bookingsReleasedAt: null,
+    },
   });
-  // Optimistically reflect the change locally too, so the UI doesn't wait
-  // for the collection-group listener's own round trip to catch up.
-  req.status = 'approved';
-  req.resultingBookingIds = resultingBookingIds;
-  req.decidedAt = decidedAt;
-  req.decidedBy = state.role;
 
-  delete state.requestAllocations[reqId];
-  logAudit('guest_request_approved', `${req.contactName} approved — ${resultingBookingIds.length} room(s) booked`);
-  render();
-  showToast(resultingBookingIds.length>1 ? `Approved — ${resultingBookingIds.length} rooms booked` : 'Approved — room booked');
+  if(typeof window.fsCommitBatch !== 'function'){
+    showToast('Could not save approval — reload and try again.', 'error');
+    return;
+  }
+
+  window.fsCommitBatch(ops).then(() => {
+    req.status = 'approved';
+    req.resultingBookingIds = resultingBookingIds;
+    req.allocatedRooms = allocatedRooms;
+    req.receptionContacts = receptionContacts;
+    req.decidedAt = decidedAt;
+    req.decidedBy = state.role;
+    req.bookingsReleasedAt = null;
+    delete state.requestAllocations[reqId];
+    const allotLines = allocations.map((a) => allotText(roomLabel(getRoom(a.roomId)), req.contactName, a.startDate, a.endDate));
+    logAudit(`approved guest request: ${allotLines.join('; ')}`);
+    render();
+    showToast(resultingBookingIds.length>1 ? `Approved — ${resultingBookingIds.length} rooms booked` : 'Approved — room booked');
+  }).catch(err => {
+    console.error('Approve failed', err);
+    showToast('Approve failed — check connection and try again.', 'error');
+  });
 }
 /* Reject shows an inline reason panel in place (this app never uses native
    window.confirm/prompt dialogs — every other action here uses an in-page
@@ -2597,7 +2823,7 @@ function confirmReject(reqId){
 
   delete state.requestAllocations[reqId];
   state.rejectingId = null;
-  logAudit('guest_request_rejected', `${req.contactName}${reason ? ' — ' + reason : ''}`);
+  logAudit(`rejected guest request from ${req.contactName}${reason ? ' — reason: ' + reason : ''}`);
   render();
   showToast('Request rejected');
 }
@@ -2642,13 +2868,13 @@ function renderDecisionSummary(req){
   if(req.status==='rejected'){
     return `<div class="text-[11px] text-mess-600 mt-2 border-t border-mess-100 pt-2">
       Rejected by ${req.decidedBy||'—'} on ${decidedDate}
-      ${req.rejectionReason ? `<br><span class="text-mess-400">Reason:</span> ${req.rejectionReason}` : ''}
+      ${req.rejectionReason ? `<br><span class="text-mess-400">Reason:</span> ${escapeHtml(req.rejectionReason)}` : ''}
     </div>`;
   }
   if(req.status==='cancelled'){
     // Guests cancel their own pending/approved requests from the guest
     // portal directly — there is no admin decidedBy for that path.
-    return `<div class="text-[11px] text-mess-600 mt-2 border-t border-mess-100 pt-2">Cancelled${req.decidedBy ? ' by ' + req.decidedBy : ' by the guest'}</div>`;
+    return `<div class="text-[11px] text-mess-600 mt-2 border-t border-mess-100 pt-2">Cancelled${req.decidedBy ? ' by ' + req.decidedBy : ' by the guest'}${req.cancellationReason ? `<br><span class="text-mess-400">Reason:</span> ${escapeHtml(req.cancellationReason)}` : ''}</div>`;
   }
   return '';
 }
@@ -2686,14 +2912,19 @@ function renderRequests(){
     // Live check (not stored) so an Approved card's header badge reflects
     // a later booking cancellation immediately, same principle as
     // renderDecisionSummary's room-by-room status.
-    let cancelledBadge = '';
+    let extraBadges = '';
+    if(isPending && req.previousStatus === 'approved'){
+      extraBadges = `<span class="text-[9px] font-semibold px-2 py-1 rounded-full" style="background:#FAF5EA;color:#A9762F">Edited after approval</span>`;
+    } else if(isPending && req.editedAt){
+      extraBadges = `<span class="text-[9px] font-semibold px-2 py-1 rounded-full bg-mess-100 text-mess-700">Edited</span>`;
+    }
     if(req.status==='approved' && req.resultingBookingIds && req.resultingBookingIds.length){
       const liveBookings = req.resultingBookingIds.map(id=>DB.bookings.find(b=>b.id===id)).filter(Boolean);
       const cancelledN = liveBookings.filter(b=>b.status==='cancelled').length;
       if(liveBookings.length && cancelledN===liveBookings.length){
-        cancelledBadge = `<span class="text-[9px] font-semibold px-2 py-1 rounded-full bg-mess-100 text-mess-500">All rooms cancelled</span>`;
+        extraBadges += `<span class="text-[9px] font-semibold px-2 py-1 rounded-full bg-mess-100 text-mess-500">All rooms cancelled</span>`;
       } else if(cancelledN>0){
-        cancelledBadge = `<span class="text-[9px] font-semibold px-2 py-1 rounded-full bg-gold-100 text-gold-700">${cancelledN}/${liveBookings.length} cancelled</span>`;
+        extraBadges += `<span class="text-[9px] font-semibold px-2 py-1 rounded-full bg-gold-100 text-gold-700">${cancelledN}/${liveBookings.length} cancelled</span>`;
       }
     }
 
@@ -2719,18 +2950,16 @@ function renderRequests(){
       <div onclick="toggleRequestExpanded('${req.id}')" class="cursor-pointer">
         <div class="flex items-center justify-between mb-1.5 gap-1.5 flex-wrap">
           <span class="text-[9px] font-semibold px-2 py-1 rounded-full" style="background:${statusMeta.bg};color:${statusMeta.color}">${statusMeta.label}</span>
-          ${cancelledBadge}
-          ${isPending ? `<span class="text-[10px] text-mess-500 ml-auto">${allocatedCount}/${req.rooms.length} allocated</span>` : ''}
+          ${extraBadges}
+          ${isPending && expanded ? `<span class="text-[10px] text-mess-500 ml-auto">${allocatedCount}/${req.rooms.length} allocated</span>` : ''}
         </div>
-        ${req.overlapsExisting ? `<div class="text-[11px] bg-red-50 text-red-700 border border-red-100 rounded-lg px-2.5 py-1.5 mb-2">⚠ Overlaps an existing confirmed booking under this phone number — verify before relying on this record.</div>` : ''}
-        <div class="text-sm font-semibold text-mess-900">${req.contactName}</div>
+        <div class="text-sm font-semibold text-mess-900">${escapeHtml(req.contactName)}</div>
         <div class="text-[11px] text-mess-500">${formatPhoneDisplay(req.phone)} &middot; ${purposeLabel} &middot; ${fmtShort(span.start)} – ${fmtShort(span.end)} &middot; ${req.rooms.length} room${req.rooms.length===1?'':'s'}</div>
-        <div class="text-[10px] text-mess-400 mt-1">${expanded ? 'Tap to collapse' : 'Tap for details'} &rsaquo;</div>
       </div>
       ${expanded ? `
         <div class="mt-2 pt-2 border-t border-mess-100">
           ${roomsHtml}
-          ${req.remarks ? `<div class="text-[11px] text-mess-500 mt-1"><span class="text-mess-400">Remarks:</span> ${req.remarks}</div>` : ''}
+          ${req.remarks ? `<div class="text-[11px] text-mess-500 mt-1"><span class="text-mess-400">Remarks:</span> ${escapeHtml(req.remarks)}</div>` : ''}
           ${actionsHtml}
         </div>` : ''}
     </div>`;
@@ -2746,7 +2975,10 @@ function renderRequests(){
   return `
   <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
     <div class="flex items-center justify-between mb-2">
-      <div class="font-display uppercase text-sm font-semibold text-mess-800">Guest Requests</div>
+      <div class="flex items-center gap-2">
+        <div class="font-display uppercase text-sm font-semibold text-mess-800">Guest Requests</div>
+        <span class="text-[10px] font-bold bg-brass-500 text-white rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center">${counts.pending}</span>
+      </div>
       <button onclick="render()" class="text-[11px] font-semibold text-mess-600 border border-mess-200 rounded-full px-3 py-1">Refresh</button>
     </div>
     <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-1">${chips}</div>
@@ -2769,7 +3001,7 @@ function renderRecords(){
     <button onclick="openDetailModal('${b.id}')" class="w-full text-left bg-white border border-mess-100 rounded-xl p-3 flex items-center gap-3 mb-2 active:opacity-70">
       <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${meta.color}"></span>
       <div class="flex-1 min-w-0">
-        <div class="text-sm font-medium text-mess-900 truncate">${b.guestName}${b.sharing?' <span class="text-[10px] text-mess-400">(sharing)</span>':''}</div>
+        <div class="text-sm font-medium text-mess-900 truncate">${escapeHtml(b.guestName)}${b.sharing?' <span class="text-[10px] text-mess-400">(sharing)</span>':''}</div>
         <div class="text-[11px] text-mess-500 truncate">${roomLabel(room)} &middot; ${fmtShort(b.startDate)} – ${fmtEndDateShort(b.endDate)} &middot; ${meta.label}</div>
       </div>
       <span class="text-[9px] font-semibold px-2 py-1 rounded-full shrink-0" style="background:${statusMeta.bg};color:${statusMeta.color}">${statusMeta.label}</span>
@@ -2799,6 +3031,28 @@ function renderRecords(){
 function onRecordsSearch(v){ state.recordsSearch = v; render(); const el=document.querySelector('#app-content input[type=text]'); if(el){ el.focus(); el.selectionStart = el.selectionEnd = el.value.length; } }
 function clearRecordsSearch(){ state.recordsSearch = ''; render(); }
 function setRecordsStatusFilter(k){ state.recordsStatusFilter = k; render(); }
+function onAuditSearch(v){
+  state.auditSearch = v;
+  const input = document.getElementById('auditSearchInput');
+  const list = document.getElementById('auditTrailList');
+  if(list){
+    const q = (v || '').trim().toLowerCase();
+    const source = (DB.auditLog || []).filter(a => {
+      if(!q) return true;
+      return `${a.detail || ''} ${a.role || ''}`.toLowerCase().includes(q);
+    }).slice(0, q ? 80 : 40);
+    list.innerHTML = source.map(a=>{
+      const when = new Date(a.ts);
+      const time = isNaN(when) ? '' : when.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      return `<div class="flex items-start gap-2 py-1.5 border-b border-mess-50 last:border-0"><div class="text-[10px] text-mess-400 font-mono-num w-16 shrink-0 pt-0.5">${time}</div><div class="text-[11px] text-mess-700 flex-1">${escapeHtml(a.detail||'')}</div></div>`;
+    }).join('') || `<div class="text-xs text-mess-400">${q ? 'No matching activity.' : 'No activity logged yet.'}</div>`;
+  }
+  if(input && document.activeElement === input) return;
+}
+function clearAuditSearch(){
+  state.auditSearch = '';
+  render();
+}
 
 function renderAdmin(){
   if(!isAdmin(state.role)){
@@ -2837,11 +3091,22 @@ function renderAdmin(){
     </div>`;
   }).join('');
 
-  const audit = DB.auditLog.slice(0,25).map(a=>`
+  const auditQ = (state.auditSearch || '').trim().toLowerCase();
+  const auditSource = (DB.auditLog || []).filter(a => {
+    if(!auditQ) return true;
+    const hay = `${a.detail || ''} ${a.role || ''}`.toLowerCase();
+    return hay.includes(auditQ);
+  });
+  const auditSlice = auditSource.slice(0, auditQ ? 80 : 40);
+  const audit = auditSlice.map(a=>{
+    const when = new Date(a.ts);
+    const time = isNaN(when) ? '' : when.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `
     <div class="flex items-start gap-2 py-1.5 border-b border-mess-50 last:border-0">
-      <div class="text-[10px] text-mess-400 font-mono-num w-12 shrink-0 pt-0.5">${new Date(a.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>
-      <div class="text-[11px] text-mess-700 flex-1"><span class="font-semibold">${a.role}</span> — ${a.detail}</div>
-    </div>`).join('') || '<div class="text-xs text-mess-400">No activity logged yet.</div>';
+      <div class="text-[10px] text-mess-400 font-mono-num w-16 shrink-0 pt-0.5">${time}</div>
+      <div class="text-[11px] text-mess-700 flex-1">${escapeHtml(a.detail||'')}</div>
+    </div>`;
+  }).join('') || `<div class="text-xs text-mess-400">${auditQ ? 'No matching activity.' : 'No activity logged yet.'}</div>`;
 
   return `
   <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-6">
@@ -2850,9 +3115,7 @@ function renderAdmin(){
       <div class="lg:col-span-2">
         ${blocks}
       </div>
-      <div>
-        <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-3">
-          <div class="font-display font-semibold text-mess-900 mb-2">Add new block</div>
+      <div class="min-w-0">
           <div class="grid grid-cols-2 gap-2 mb-2">
             <input id="newBlockName" placeholder="Block name" class="border border-mess-200 rounded-lg px-3 py-2 text-sm">
             <input id="newBlockPrefix" placeholder="Prefix e.g. GB" maxlength="4" class="border border-mess-200 rounded-lg px-3 py-2 text-sm">
@@ -2869,19 +3132,65 @@ function renderAdmin(){
           <button onclick="addBlock()" class="w-full py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold">Add block</button>
         </div>
 
+        <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-3">
+          <div class="font-display font-semibold text-mess-900 mb-2">Reception orderlies</div>
+          <div class="text-[10px] text-mess-400 mb-2">Used in WhatsApp intimation messages.</div>
+          <div id="orderlyList" class="space-y-2 mb-2">
+            ${receptionOrderlies().map((o,i)=>`
+              <div class="orderly-row space-y-1.5">
+                <input class="ol-name w-full min-w-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Name" value="${escapeHtml(o.name||'')}">
+                <div class="flex gap-1 min-w-0">
+                  <input class="ol-phone min-w-0 flex-1 border border-mess-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Phone" value="${escapeHtml(o.phone||'')}">
+                  <button type="button" onclick="this.closest('.orderly-row').remove()" class="shrink-0 w-8 h-8 rounded-lg text-red-500 text-xs">✕</button>
+                </div>
+              </div>`).join('')}
+          </div>
+          <button type="button" onclick="addOrderlyRow()" class="w-full mb-2 py-1.5 rounded-lg border border-dashed border-mess-300 text-mess-600 text-xs font-semibold">+ Add contact</button>
+          <button type="button" onclick="saveReceptionOrderlies()" class="w-full py-2 rounded-xl bg-mess-700 text-white text-sm font-semibold">Save contacts</button>
+        </div>
+
         <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-6">
           <div class="font-display font-semibold text-mess-900 mb-2">Audit trail</div>
-          <div class="max-h-64 overflow-y-auto">${audit}</div>
+          <div class="relative mb-2">
+            <input id="auditSearchInput" type="text" value="${escapeHtml(state.auditSearch)}" placeholder="Search name, room, cancelled, approved…"
+              oninput="onAuditSearch(this.value)"
+              class="w-full border border-mess-200 rounded-lg pl-3 ${state.auditSearch?'pr-8':'pr-3'} py-1.5 text-sm bg-white">
+            ${state.auditSearch ? `<button type="button" onclick="clearAuditSearch()" aria-label="Clear search" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-mess-100 text-mess-500 flex items-center justify-center text-xs leading-none">✕</button>` : ''}
+          </div>
+          <div id="auditTrailList" class="max-h-64 overflow-y-auto">${audit}</div>
         </div>
       </div>
     </div>
   </div>`;
 }
-function toggleRoomListView(blockId){ document.getElementById('roomlist_'+blockId).classList.toggle('hidden'); }
+function addOrderlyRow(){
+  const list = document.getElementById('orderlyList');
+  if(!list) return;
+  const row = document.createElement('div');
+  row.className = 'orderly-row space-y-1.5';
+  row.innerHTML = `<input class="ol-name w-full min-w-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Name"><div class="flex gap-1 min-w-0"><input class="ol-phone min-w-0 flex-1 border border-mess-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Phone"><button type="button" onclick="this.closest('.orderly-row').remove()" class="shrink-0 w-8 h-8 rounded-lg text-red-500 text-xs">✕</button></div>`;
+  list.appendChild(row);
+}
+function saveReceptionOrderlies(){
+  const rows = [...document.querySelectorAll('#orderlyList .orderly-row')];
+  const orderlies = rows.map(row => ({
+    name: (row.querySelector('.ol-name')||{}).value||'',
+    phone: (row.querySelector('.ol-phone')||{}).value||'',
+  })).map(o => ({ name: o.name.trim(), phone: o.phone.trim() })).filter(o => o.name || o.phone);
+  if(typeof window.fsSetDoc !== 'function'){ showToast('Could not save', 'error'); return; }
+  window.fsSetDoc('settings', 'reception', { orderlies }).then(()=>{
+    DB.receptionOrderlies = orderlies;
+    logAudit('updated reception orderly contact numbers');
+    showToast('Reception contacts saved');
+  }).catch(err=>{
+    console.error(err);
+    showToast('Could not save contacts', 'error');
+  });
+}
 function toggleBlockActive(id, val){
   const b = getBlock(id); b.active = val;
   persistBlock(b);
-  logAudit('block_toggled', `${b.name} → ${val?'active':'inactive'}`);
+  logAudit(`${val ? 'activated' : 'deactivated'} block ${b.name}`);
   render();
 }
 
@@ -2918,6 +3227,7 @@ function openRoomModal(roomId, presetBlockId){
   }
   onRoomTypeChange();
   document.getElementById('roomModal').classList.remove('hidden');
+  focusModal('roomModal');
 }
 function closeRoomModal(){ document.getElementById('roomModal').classList.add('hidden'); }
 function onRoomTypeChange(){
@@ -2953,7 +3263,7 @@ function saveRoom(ev){
     const room = getRoom(editingId);
     Object.assign(room, { roomNo, blockId, type, status, name: type==='vip' ? (suiteName || room.name || null) : null });
     persistRoom(room);
-    logAudit('room_edited', `${roomLabel(room)} updated`);
+    logAudit(`updated room ${roomLabel(room)} (${type}${status==='maintenance' ? ', on maintenance' : ''})`);
     closeRoomModal(); render();
     showToast('Room updated');
   } else {
@@ -2962,7 +3272,7 @@ function saveRoom(ev){
     persistRoom(room);
     const block = getBlock(blockId);
     if(block){ block.count = roomsForBlock(blockId).length; persistBlock(block); }
-    logAudit('room_added', `${roomLabel(room)} added to ${block ? block.name : blockId}`);
+    logAudit(`added room ${roomLabel(room)} to ${block ? block.name : blockId}`);
     closeRoomModal(); render();
     showToast('Room added');
   }
@@ -2981,7 +3291,7 @@ function addBlock(){
   if(type!=='vip'){ rooms.forEach(r=>{ r.type = type; }); }
   DB.rooms = DB.rooms.concat(rooms);
   rooms.forEach(persistRoom);
-  logAudit('block_added', `${name} (${count} rooms)`);
+  logAudit(`added block ${name} with ${count} rooms`);
   render();
   showToast('Block added');
 }

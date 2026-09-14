@@ -1,0 +1,89 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ===========================================================================
+       HOW TO USE THIS FILE
+       ===========================================================================
+       Firebase Console → Firestore Database → Rules tab → replace with this
+       entire file → Publish. GitHub Pages cannot deploy rules.
+
+       VERIFY IN THE RULES PLAYGROUND:
+         1. An unauthenticated read of bookingRequests/{aPhone}/items succeeds.
+         2. An unauthenticated collectionGroup('items') query FAILS.
+         3. A signed-in @omafa.in account's collectionGroup('items') query succeeds.
+         4. An unauthenticated read/write of bookings/{id} FAILS.
+       =========================================================================== */
+
+    function isStaff() {
+      return request.auth != null
+          && request.auth.token.email != null
+          && request.auth.token.email.matches('.*@omafa[.]in$');
+    }
+
+    /* Core ops data: any signed-in @omafa.in account. Roles are a UI
+       distinction only (no custom claims on Spark). */
+    match /blocks/{blockId} {
+      allow read, write: if isStaff();
+    }
+    match /rooms/{roomId} {
+      allow read, write: if isStaff();
+    }
+    match /bookings/{bookingId} {
+      allow read, write: if isStaff();
+    }
+    match /auditLog/{logId} {
+      allow read, write: if isStaff();
+    }
+    match /settings/{id} {
+      allow read, write: if isStaff();
+    }
+
+    /* Path-scoped guest requests. Guests never read or write `bookings`.
+       Linked rooms are released by the staff app when it sees a guest
+       cancel or a re-edit of an approved request (Spark has no Functions). */
+    match /bookingRequests/{phone}/items/{requestId} {
+      allow read: if true;
+
+      allow create: if isValidNewRequest(request.resource.data)
+                    && request.resource.data.phone == phone;
+
+      allow update: if isStaff() || isValidGuestUpdate(resource.data, request.resource.data);
+
+      allow delete: if false;
+    }
+
+    match /{path=**}/items/{requestId} {
+      allow read: if isStaff();
+    }
+
+    function isValidNewRequest(d) {
+      return d.status == 'pending'
+          && d.contactName is string && d.contactName.size() > 0 && d.contactName.size() <= 60
+          && d.phone is string && d.phone.matches('^[+]91[6-9][0-9]{9}$')
+          && d.purpose in ['TD','PostingIn','PostedOut','Leave','LivingIn','OfficialGuest','GuestFamily']
+          && d.remarks is string && d.remarks.size() <= 300
+          && d.rooms is list && d.rooms.size() >= 1 && d.rooms.size() <= 10
+          && d.createdAt is string
+          && d.resultingBookingIds is list && d.resultingBookingIds.size() == 0;
+    }
+
+    function isValidGuestUpdate(before, after) {
+      return before.phone == after.phone && (
+        (after.status == 'cancelled'
+          && before.status in ['pending', 'approved']
+          && after.diff(before).affectedKeys().hasOnly(['status','cancellationReason'])
+          && after.cancellationReason is string
+          && after.cancellationReason.size() > 0
+          && after.cancellationReason.size() <= 300)
+        ||
+        (after.status == 'pending'
+          && before.status in ['pending', 'approved']
+          && after.diff(before).affectedKeys().hasOnly(
+               ['status','contactName','purpose','remarks','rooms',
+                'overlapsExisting','editedAt','previousStatus']))
+      );
+    }
+  }
+}
