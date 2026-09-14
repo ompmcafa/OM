@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<title>Request a Booking &middot; Officers Mess, AFA</title>
+<meta name="description" content="Request accommodation or check the status of your booking request at Officers Mess, Air Force Academy.">
+<meta name="theme-color" content="#122d5e">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          display: ['Oswald', 'sans-serif'],
+          body: ['Inter', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        colors: {
+          /* Same navy family as the staff app, so this page reads as part of
+             the same institution — but "brass" here is an actual warm gold,
+             not the blue used for "brass" in the admin app's token names.
+             This page is the reception desk, not the ops room: warmer,
+             lighter, fewer controls per screen. */
+          mess: {
+            50:  '#eef3fb', 100: '#d7e3f5', 200: '#b0c7ec', 300: '#7fa3de', 400: '#4d7dce',
+            500: '#2f5fb8', 600: '#1f4694', 700: '#173a7a', 800: '#122d5e', 900: '#0c1f42',
+          },
+          gold: {
+            50:  '#faf5ea', 100: '#f3e8cc', 200: '#e6cf99', 300: '#d3ac5c',
+            400: '#bd8f3c', 500: '#a9762f', 600: '#8c6026', 700: '#6f4c1f',
+          },
+          status: {
+            pending:  '#A9762F',
+            approved: '#3F9A63',
+            rejected: '#C0392B',
+            cancelled:'#7A8699',
+          }
+        }
+      }
+    }
+  }
+</script>
+<style>
+  html, body { -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Inter', sans-serif; background:#F6F2E9; margin:0; color:#122d5e; }
+  .font-display { font-family: 'Oswald', sans-serif; }
+  .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin:0; }
+  input[type="number"] { -moz-appearance: textfield; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.3); }
+  @keyframes popIn { from { opacity:0; transform: scale(0.85); } to { opacity:1; transform: scale(1); } }
+  .pop-in { animation: popIn .35s cubic-bezier(.2,.8,.3,1.1); }
+  @media (prefers-reduced-motion: reduce) { .pop-in { animation: none; } }
+  .stepper-btn { width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:600; }
+  fieldset:disabled, input:disabled, select:disabled { cursor:not-allowed; opacity:0.6; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid #2f5fb8; outline-offset: 2px;
+  }
+  .field-error { border-color:#C0392B !important; }
+  .field-error-msg { color:#C0392B; font-size:11px; margin-top:4px; }
+</style>
+</head>
+<body class="antialiased">
+
+<div class="max-w-md mx-auto min-h-screen flex flex-col bg-[#F6F2E9]">
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="safe-top bg-mess-800 text-white shrink-0">
+    <div class="flex items-center gap-2.5 px-4 pt-4 pb-3">
+      <div class="w-9 h-9 rounded-full bg-gold-400 flex items-center justify-center font-display font-bold text-white text-sm shrink-0">AM</div>
+      <div class="leading-tight min-w-0">
+        <div class="font-display uppercase tracking-wide text-[15px] font-semibold truncate">Officers Mess, AFA</div>
+        <div class="text-[11px] text-mess-200 -mt-0.5">Room Booking Portal for Guests</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== APP ===================== -->
+  <main id="app" class="flex-1 px-4 py-3"></main>
+</div>
+
+<script type="module">
+  /* =========================================================================
+     FIRESTORE — same project as the staff Accommodation Manager app, so an
+     approved request's resultingBookingIds resolve against the same real
+     `bookings` collection. Guests never sign in here (no Firebase Auth) —
+     access control instead comes entirely from where each request document
+     LIVES: bookingRequests/{phone}/items/{requestId}. Firestore security
+     rules cannot inspect the VALUE a client filters a query on (there is no
+     way to write a rule that says "only if this query's where(phone==X)
+     matches the caller" for an unauthenticated request) — so a flat
+     collection with a phone-filtered query would be unenforceable and
+     would in fact require rules permissive enough that anyone could list
+     the WHOLE collection. Scoping by path instead means a guest can only
+     ever read/write within their own phone's subcollection, full stop.
+     See the accompanying firestore.rules notes for the staff-only
+     collection-group rule that powers the admin app's aggregate view. */
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+  import {
+    getFirestore, doc, setDoc, updateDoc, getDocs, collection, query, where
+  } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAoi0P3RgI5cjelKMLlC3AyQigtV9j2ZwQ",
+    authDomain: "accomodation-b3799.firebaseapp.com",
+    projectId: "accomodation-b3799",
+    storageBucket: "accomodation-b3799.firebasestorage.app",
+    messagingSenderId: "994810144662",
+    appId: "1:994810144662:web:3894c10b4e28a22f9c5fb7"
+  };
+  const fbApp = initializeApp(firebaseConfig);
+  const fsDb = getFirestore(fbApp);
+
+  window.fsSetNestedDoc = function(pathSegments, data){
+    return setDoc(doc(fsDb, ...pathSegments), data);
+  };
+  window.fsUpdateNestedDoc = function(pathSegments, data){
+    return updateDoc(doc(fsDb, ...pathSegments), data);
+  };
+  window.fsGetCollection = async function(pathSegments){
+    const snap = await getDocs(collection(fsDb, ...pathSegments));
+    const arr = [];
+    snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+    return arr;
+  };
+  /* Used only for the read-only "does this phone already have a confirmed
+     stay" overlap check against the main app's own `bookings` collection —
+     never written to from here. */
+  window.fsQueryByField = async function(collectionName, field, value){
+    const snap = await getDocs(query(collection(fsDb, collectionName), where(field, '==', value)));
+    const arr = [];
+    snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+    return arr;
+  };
+  window.fsReady = Promise.resolve(); // resolved immediately — no auth handshake needed for guests
+</script>
+
+<script>
+/* =========================================================================
+   DATA LAYER — FIRESTORE
+   Path: bookingRequests/{phone}/items/{requestId}. Every function here is
+   async now (Firestore round-trips), so every caller further down uses
+   ========================================================================= */
+function stripId(obj){ const { id, ...rest } = obj; return rest; }
+
+async function requestsByPhone(phone){
+  try{
+    const arr = await window.fsGetCollection(['bookingRequests', phone, 'items']);
+    return arr.sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||''));
+  }catch(e){
+    console.error('Failed to load requests for this phone number', e);
+    return [];
+  }
+}
+async function pendingRequestsByPhone(phone){
+  const all = await requestsByPhone(phone);
+  return all.filter(r => r.status === 'pending');
+}
+async function persistRequest(reqObj){
+  return window.fsSetNestedDoc(['bookingRequests', reqObj.phone, 'items', reqObj.id], stripId(reqObj));
+}
+async function updateRequestDoc(phone, id, patch){
+  return window.fsUpdateNestedDoc(['bookingRequests', phone, 'items', id], patch);
+}
+/* Checks the main app's real `bookings` collection for a confirmed stay
+   under this phone number, so a new request that overlaps one can be
+   flagged for staff review at approval time (flagged, not blocked). */
+async function confirmedBookingsByPhone(phone){
+  try{
+    const all = await window.fsQueryByField('bookings', 'guestPhone', phone);
+    return all.filter(b => b.status !== 'cancelled');
+  }catch(e){
+    console.error('Failed to check existing bookings for this phone number', e);
+    return [];
+  }
+}
+
+
+/* =========================================================================
+   HELPERS
+   ========================================================================= */
+function uid(p){ return (p||'id') + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+/* Same normalization rule as the main app: blank is allowed to be rejected
+   here (phone is mandatory on this page), otherwise must resolve to a
+   10-digit Indian mobile number. */
+function normalizePhone(raw){
+  const trimmed = (raw || '').trim();
+  if(!trimmed) return { ok:false, value:null, reason:'Enter a contact number.' };
+  let digits = trimmed.replace(/\D/g, '');
+  if(digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  else if(digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  if(digits.length !== 10 || !/^[6-9]/.test(digits)) return { ok:false, value:null, reason:'Enter a valid 10-digit mobile number.' };
+  return { ok:true, value: '+91' + digits, reason:null };
+}
+function formatPhoneDisplay(p){ return p ? '+91 ' + p.slice(3) : '—'; }
+
+function toISO(d){ const x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
+function fromISO(iso){ const [y,m,d]=iso.split('-').map(Number); return new Date(y,m-1,d); }
+function todayISO(){ return toISO(new Date()); }
+function fmtShort(iso){ return fromISO(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
+function fmtLong(iso){ return fromISO(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+
+const DEFAULT_CHECKIN_TIME = '14:00';
+const DEFAULT_CHECKOUT_TIME = '12:00';
+function timeOrDefault(raw, fallback){ return (raw && /^\d{2}:\d{2}$/.test(raw)) ? raw : fallback; }
+
+/* Same Purpose-of-visit vocabulary as the main app (minus VIP, which is a
+   room Type staff assign, never something a guest selects). Keeping the
+   keys identical means an approved request maps straight onto the main
+   app's CATEGORY_META without any translation step later. */
+const PURPOSES = [
+  { key:'TD',            label:'Temporary Duty (TD)' },
+  { key:'PostingIn',     label:'Posting-in' },
+  { key:'PostedOut',     label:'Posted-out' },
+  { key:'Leave',         label:'Leave' },
+  { key:'LivingIn',      label:'Living-in' },
+  { key:'OfficialGuest', label:'Official Guest' },
+  { key:'GuestFamily',   label:'Guest / Family / Self' },
+];
+const REQUEST_STATUS_META = {
+  pending:   { label:'Pending review',  color:'#A9762F', bg:'#FAF5EA' },
+  approved:  { label:'Approved',        color:'#3F9A63', bg:'#EAF6EF' },
+  rejected:  { label:'Not approved',    color:'#C0392B', bg:'#FBEAEA' },
+  cancelled: { label:'Cancelled',       color:'#7A8699', bg:'#EEF0F3' },
+};
+const MAX_PENDING_PER_PHONE = 2;
+
+/* Overall span of a request = earliest room start to latest room end,
+   across every room in it. Used for the "no overlapping pending requests"
+   rule and (later) for flagging overlap against confirmed bookings. */
+function requestSpan(req){
+  const starts = req.rooms.map(r=>r.startDate);
+  const ends = req.rooms.map(r=>r.endDate);
+  return { start: starts.sort()[0], end: ends.sort().slice(-1)[0] };
+}
+function spansOverlap(aStart, aEnd, bStart, bEnd){ return aStart <= bEnd && bStart <= aEnd; }
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+const state = {
+  view: 'landing',       // landing | statusPhone | statusResults | requestGate | requestForm | requestReview | requestSuccess | requestDetail
+  statusPhone: '',
+  statusResults: null,
+  gatePhone: '',
+  gateBlockedInfo: null, // set when phone has 2 pending already
+  submitting: false,
+  editingId: null,       // set while editing an existing request (pending or, within the cutoff, approved)
+  editingOriginalStatus: null,
+  viewingRequestId: null,
+  fieldErrors: {},       // per-field validation messages, keyed e.g. 'contactName' or 'room.0.startDate'
+  form: emptyForm(),
+};
+function emptyForm(){
+  return {
+    contactName: '',
+    phone: '',
+    purpose: 'GuestFamily',
+    remarks: '',
+    numRooms: 1,
+    rooms: [emptyRoom()],
+  };
+}
+function emptyRoom(){
+  return {
+    adults: 1,
+    extraBedding: false,
+    children: [],
+    startDate: '', endDate: '', startTime: '', endTime: '',
+  };
+}
+
+/* =========================================================================
+   RENDER DISPATCH
+   ========================================================================= */
+function render(){
+  const app = document.getElementById('app');
+  if(state.view==='landing')        app.innerHTML = renderLanding();
+  else if(state.view==='statusPhone')    app.innerHTML = renderStatusPhone();
+  else if(state.view==='statusResults')  app.innerHTML = renderStatusResults();
+  else if(state.view==='requestGate')    app.innerHTML = renderRequestGate();
+  else if(state.view==='requestForm')    app.innerHTML = renderRequestForm();
+  else if(state.view==='requestReview')  app.innerHTML = renderRequestReview();
+  else if(state.view==='requestSuccess') app.innerHTML = renderRequestSuccess();
+  else if(state.view==='requestDetail')  app.innerHTML = renderRequestDetail();
+}
+/* The only place scroll position is reset — a genuine screen change.
+   Same-screen updates (a stepper tap, adding a child row, typing a field)
+   call render() directly and deliberately leave scroll position alone. */
+function goTo(view){ state.view = view; render(); window.scrollTo(0,0); }
+
+/* =========================================================================
+   LANDING
+   ========================================================================= */
+function renderLanding(){
+  return `
+  <div class="space-y-3">
+    <div class="font-display text-2xl font-semibold text-mess-900 leading-tight mb-1">Book your stay</div>
+
+    <button onclick="goTo('requestGate')" class="w-full text-left bg-white rounded-2xl border border-mess-100 p-4 flex items-center gap-3 active:scale-[0.99] transition-transform">
+      <div class="w-11 h-11 rounded-xl bg-gold-100 text-gold-600 flex items-center justify-center text-xl shrink-0">&#128197;</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-display text-base font-semibold text-mess-900">Request a new booking</div>
+      </div>
+      <span class="text-mess-300 text-lg shrink-0">&rsaquo;</span>
+    </button>
+
+    <button onclick="goTo('statusPhone')" class="w-full text-left bg-white rounded-2xl border border-mess-100 p-4 flex items-center gap-3 active:scale-[0.99] transition-transform">
+      <div class="w-11 h-11 rounded-xl bg-mess-50 text-mess-700 flex items-center justify-center text-xl shrink-0">&#128269;</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-display text-base font-semibold text-mess-900">Check my booking status</div>
+      </div>
+      <span class="text-mess-300 text-lg shrink-0">&rsaquo;</span>
+    </button>
+  </div>`;
+}
+
+/* =========================================================================
+   STATUS CHECK
+   ========================================================================= */
+function renderStatusPhone(){
+  return `
+  <div>
+    <button onclick="goTo('landing')" class="text-sm text-mess-500 mb-4">&larr; Back</button>
+    <div class="font-display text-xl font-semibold text-mess-900 mb-3">Check booking status</div>
+
+    <label for="statusPhoneInput" class="text-xs font-medium text-mess-600">Phone number</label>
+    <input id="statusPhoneInput" type="tel" inputmode="numeric" placeholder="10-digit mobile number" value="${state.statusPhone}"
+      onkeydown="if(event.key==='Enter'){ event.preventDefault(); lookupStatus(); }"
+      class="w-full mt-1 border border-mess-200 rounded-xl px-3 py-3 text-sm bg-white">
+    <div id="statusPhoneError" class="hidden text-xs text-red-600 mt-1.5 px-0.5"></div>
+
+    <button id="statusCheckBtn" onclick="lookupStatus()" class="w-full mt-4 py-3 rounded-xl bg-mess-800 text-white text-sm font-semibold">Check status</button>
+  </div>`;
+}
+async function lookupStatus(){
+  const raw = document.getElementById('statusPhoneInput').value;
+  const check = normalizePhone(raw);
+  const errBox = document.getElementById('statusPhoneError');
+  if(!check.ok){ errBox.textContent = check.reason; errBox.classList.remove('hidden'); return; }
+  errBox.classList.add('hidden');
+  const btn = document.getElementById('statusCheckBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Checking…'; }
+  state.statusPhone = raw;
+  state._statusPhoneNormalized = check.value;
+  state.statusResults = await requestsByPhone(check.value);
+  goTo('statusResults');
+}
+/* A confirmed (approved) booking can be cancelled online up to the day
+   before arrival — i.e. arrival must still be at least one full day away.
+   Same-day or past-arrival cancellations must go through the mess staff
+   directly, since same-day changes affect room readiness. */
+function canCancelApproved(span){ return span.start > todayISO(); }
+/* Editing follows the exact same window as cancelling: a pending request
+   can always be adjusted; a confirmed one only up to the day before
+   arrival. Past that, changes have to go through the mess reception. */
+function canEditRequest(req){
+  if(req.status==='pending') return true;
+  if(req.status==='approved') return canCancelApproved(requestSpan(req));
+  return false;
+}
+
+function renderStatusResults(){
+  const results = state.statusResults || [];
+  const phoneLabel = formatPhoneDisplay(state._statusPhoneNormalized);
+  const rows = results.map(r=>{
+    const meta = REQUEST_STATUS_META[r.status];
+    const span = requestSpan(r);
+
+    let actionHtml = '';
+    if(r.status==='pending'){
+      actionHtml = `<button onclick="event.stopPropagation(); cancelGuestRequest('${r.id}','pending')" class="mt-2.5 w-full py-2 rounded-lg border border-red-200 text-red-600 text-[12px] font-semibold">Cancel request</button>`;
+    } else if(r.status==='approved'){
+      if(canCancelApproved(span)){
+        actionHtml = `<button onclick="event.stopPropagation(); cancelGuestRequest('${r.id}','approved')" class="mt-2.5 w-full py-2 rounded-lg border border-red-200 text-red-600 text-[12px] font-semibold">Cancel booking</button>`;
+      } else {
+        actionHtml = `<div class="mt-2.5 text-[11px] text-mess-400 bg-mess-50 rounded-lg px-2.5 py-2">Too close to arrival to cancel here — please contact the mess reception directly.</div>`;
+      }
+    }
+
+    return `
+    <div onclick="viewRequest('${r.id}')" class="bg-white rounded-xl border border-mess-100 p-3.5 mb-2.5 active:bg-mess-50/60">
+      <div class="mb-1.5">
+        <span class="text-[9px] font-semibold px-2 py-1 rounded-full" style="background:${meta.bg};color:${meta.color}">${meta.label}</span>
+      </div>
+      <div class="text-sm font-medium text-mess-900">${r.contactName}</div>
+      <div class="text-[12px] text-mess-500 mt-0.5">${fmtShort(span.start)} &ndash; ${fmtShort(span.end)} &middot; ${r.rooms.length} room${r.rooms.length===1?'':'s'} &middot; ${(PURPOSES.find(p=>p.key===r.purpose)||{}).label||r.purpose}</div>
+      <div class="text-[11px] text-mess-400 mt-1">Tap to view details &rsaquo;</div>
+      ${actionHtml}
+    </div>`;
+  }).join('') || `
+    <div class="bg-white rounded-xl border border-mess-100 p-6 text-center">
+      <div class="text-2xl mb-2">&#128269;</div>
+      <div class="text-sm font-medium text-mess-700">No requests found</div>
+      <div class="text-[12px] text-mess-500 mt-1">No requests found for this number.</div>
+    </div>`;
+
+  return `
+  <div>
+    <button onclick="goTo('statusPhone')" class="text-sm text-mess-500 mb-4">&larr; Search again</button>
+    <div class="font-display text-xl font-semibold text-mess-900 mb-1">Your requests</div>
+    <div class="text-sm text-mess-500 mb-4">${phoneLabel}</div>
+    ${rows}
+    <button onclick="goTo('landing')" class="w-full mt-2 py-3 rounded-xl border border-mess-200 text-mess-700 text-sm font-semibold">Back to home</button>
+  </div>`;
+}
+/* TODO (Firebase integration): cancelling an *approved* request here must
+   also cancel the corresponding real booking(s) in the main app's
+   `bookings` collection (resultingBookingIds) — not just this request
+   record — so the room actually frees up for staff to reallocate. */
+async function cancelGuestRequest(id, kind){
+  const msg = kind==='pending'
+    ? 'Cancel this booking request? This cannot be undone.'
+    : 'Cancel this confirmed booking? This cannot be undone, and the room will be released.';
+  if(!window.confirm(msg)) return;
+
+  const req = (state.statusResults||[]).find(r=>r.id===id);
+  if(!req) return;
+  try{
+    await updateRequestDoc(req.phone, id, { status: 'cancelled' });
+  }catch(e){
+    console.error('Cancel failed', e);
+    window.alert('Could not cancel this request — check your connection and try again.');
+    return;
+  }
+  state.statusResults = await requestsByPhone(state._statusPhoneNormalized);
+  render();
+}
+
+/* =========================================================================
+   VIEW / EDIT AN EXISTING REQUEST
+   Both operate off state.statusResults — already fetched for this phone
+   number during the status check — rather than re-querying Firestore, so
+   opening a request's detail view is instant, not another round trip.
+   ========================================================================= */
+function viewRequest(id){
+  state.viewingRequestId = id;
+  goTo('requestDetail');
+}
+function renderRequestDetail(){
+  const req = (state.statusResults||[]).find(r=>r.id===state.viewingRequestId);
+  if(!req){
+    return `<div class="text-center text-sm text-mess-500 py-10">This request could not be found.<br><button onclick="goTo('landing')" class="mt-3 text-mess-700 font-semibold">Back to home</button></div>`;
+  }
+  const meta = REQUEST_STATUS_META[req.status];
+  const span = requestSpan(req);
+  const editable = canEditRequest(req);
+
+  const roomsHtml = req.rooms.map((r,i)=>`
+    <div class="bg-mess-50 rounded-xl p-3 mb-2">
+      <div class="text-[11px] font-semibold text-mess-700 uppercase tracking-wide mb-1.5">Room ${i+1}</div>
+      <div class="text-[12px] text-mess-600">${fmtLong(r.startDate)} ${r.startTime||DEFAULT_CHECKIN_TIME} &rarr; ${fmtLong(r.endDate)} ${r.endTime||DEFAULT_CHECKOUT_TIME}</div>
+      <div class="text-[12px] text-mess-600 mt-1">${r.adults} adult${r.adults===1?'':'s'}${r.children.length? ', ' + r.children.length + ' child' + (r.children.length===1?'':'ren') + ' (age ' + r.children.map(c=>c.age).join(', ') + ')' : ''}</div>
+      ${r.extraBedding ? `<div class="text-[11px] text-gold-700 mt-1">+ Extra bedding requested</div>` : ''}
+    </div>`).join('');
+
+  return `
+  <div>
+    <button onclick="goTo('statusResults')" class="text-sm text-mess-500 mb-4">&larr; Back to my requests</button>
+
+    <div class="mb-1.5">
+      <span class="text-[9px] font-semibold px-2 py-1 rounded-full" style="background:${meta.bg};color:${meta.color}">${meta.label}</span>
+    </div>
+    <div class="font-display text-xl font-semibold text-mess-900 mb-1">${req.contactName}</div>
+    <div class="text-sm text-mess-500 mb-4">${formatPhoneDisplay(req.phone)} &middot; ${(PURPOSES.find(p=>p.key===req.purpose)||{}).label||req.purpose}</div>
+
+    ${roomsHtml}
+
+    ${req.status==='rejected' && req.rejectionReason ? `<div class="bg-red-50 border border-red-100 rounded-xl p-3 mb-2"><div class="text-[11px] text-red-400 mb-0.5">Reason</div><div class="text-[12px] text-red-700">${req.rejectionReason}</div></div>` : ''}
+
+    ${req.remarks ? `<div class="bg-white border border-mess-100 rounded-xl p-3 mb-2"><div class="text-[11px] text-mess-400 mb-0.5">Remarks</div><div class="text-[12px] text-mess-700">${req.remarks}</div></div>` : ''}
+
+    <div class="flex gap-2 mt-4">
+      ${editable ? `<button onclick="editRequest('${req.id}')" class="flex-1 py-3 rounded-xl border border-mess-300 text-mess-700 text-sm font-semibold">Edit</button>` : ''}
+      ${(req.status==='pending' || (req.status==='approved' && canCancelApproved(span))) ? `<button onclick="cancelGuestRequest('${req.id}','${req.status}')" class="flex-1 py-3 rounded-xl border border-red-200 text-red-600 text-sm font-semibold">Cancel</button>` : ''}
+    </div>
+    ${!editable && req.status==='approved' ? `<div class="text-[11px] text-mess-400 mt-2 text-center">Too close to arrival to edit or cancel here — please contact the mess reception directly.</div>` : ''}
+  </div>`;
+}
+/* Loads an existing request back into the form for editing. Reuses the
+   same room-card form used for a brand-new request — the only difference
+   is confirmSubmit() updates the existing record instead of creating a
+   new one (see state.editingId). */
+function editRequest(id){
+  const req = (state.statusResults||[]).find(r=>r.id===id);
+  if(!req) return;
+  state.editingId = id;
+  state.editingOriginalStatus = req.status;
+  state.fieldErrors = {};
+  state._gatePhoneNormalized = req.phone;
+  state.form = {
+    contactName: req.contactName,
+    phone: req.phone,
+    purpose: req.purpose,
+    remarks: req.remarks,
+    numRooms: req.rooms.length,
+    rooms: req.rooms.map(r => ({
+      adults: r.adults,
+      extraBedding: !!r.extraBedding,
+      children: r.children.map(c => ({ age: c.age })),
+      startDate: r.startDate, endDate: r.endDate,
+      startTime: r.startTime, endTime: r.endTime,
+    })),
+  };
+  goTo('requestForm');
+}
+
+/* =========================================================================
+   REQUEST — PHONE GATE
+   Checked before showing the full form, so a guest never fills in a whole
+   party's details only to be told at the end that they're blocked.
+   ========================================================================= */
+function renderRequestGate(){
+  return `
+  <div>
+    <button onclick="goTo('landing')" class="text-sm text-mess-500 mb-4">&larr; Back</button>
+    <div class="font-display text-xl font-semibold text-mess-900 mb-1">Start your request</div>
+    <div class="text-sm text-mess-500 mb-4">We'll check for any existing pending requests first.</div>
+
+    <label for="gatePhoneInput" class="text-xs font-medium text-mess-600">Phone number</label>
+    <input id="gatePhoneInput" type="tel" inputmode="numeric" placeholder="10-digit mobile number" value="${state.gatePhone}"
+      onkeydown="if(event.key==='Enter'){ event.preventDefault(); checkGate(); }"
+      class="w-full mt-1 border border-mess-200 rounded-xl px-3 py-3 text-sm bg-white">
+    <div id="gatePhoneError" class="hidden text-xs text-red-600 mt-1.5 px-0.5"></div>
+
+    ${state.gateBlockedInfo ? `
+    <div class="mt-3 bg-gold-50 border border-gold-200 rounded-xl p-3.5">
+      <div class="text-sm font-medium text-mess-900 mb-1">You already have ${state.gateBlockedInfo.count} pending request${state.gateBlockedInfo.count>1?'s':''}</div>
+      <div class="text-[12px] text-mess-600">Please wait until ${state.gateBlockedInfo.count>1?'they are':'it is'} confirmed or cancelled before submitting a new one — or check its status below.</div>
+      <button onclick="checkPendingFromGate()" class="mt-2.5 w-full py-2.5 rounded-lg bg-white border border-gold-300 text-gold-700 text-xs font-semibold">Check status of pending requests</button>
+    </div>` : ''}
+
+    <button id="gateContinueBtn" onclick="checkGate()" class="w-full mt-4 py-3 rounded-xl bg-mess-800 text-white text-sm font-semibold">Continue</button>
+  </div>`;
+}
+async function checkGate(){
+  const raw = document.getElementById('gatePhoneInput').value;
+  const check = normalizePhone(raw);
+  const errBox = document.getElementById('gatePhoneError');
+  state.gateBlockedInfo = null;
+  if(!check.ok){ errBox.textContent = check.reason; errBox.classList.remove('hidden'); render(); return; }
+  errBox.classList.add('hidden');
+  const btn = document.getElementById('gateContinueBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Checking…'; }
+
+  const pending = await pendingRequestsByPhone(check.value);
+  if(pending.length >= MAX_PENDING_PER_PHONE){
+    state.gatePhone = raw;
+    state.gateBlockedInfo = { count: pending.length };
+    render();
+    return;
+  }
+  // Allowed through — seed the form with this phone and reset everything else.
+  state.editingId = null;
+  state.fieldErrors = {};
+  state.form = emptyForm();
+  state.form.phone = raw;
+  state._gatePhoneNormalized = check.value;
+  state._existingPendingSpans = pending.map(requestSpan);
+  goTo('requestForm');
+}
+/* Jumps straight to the status-results screen using the phone number
+   already entered on the gate screen — avoids re-reading a #statusPhoneInput
+   element that doesn't exist on this screen (that was the earlier bug). */
+async function checkPendingFromGate(){
+  const check = normalizePhone(state.gatePhone);
+  if(!check.ok) return;
+  state.statusPhone = state.gatePhone;
+  state._statusPhoneNormalized = check.value;
+  state.statusResults = await requestsByPhone(check.value);
+  goTo('statusResults');
+}
+
+/* =========================================================================
+   REQUEST FORM
+   One continuous scrolling form: party contact details, then a room card
+   per room needed (adults/children/dates), added or removed as the
+   "number of rooms" stepper changes.
+   ========================================================================= */
+function setNumRooms(n){
+  n = Math.max(1, Math.min(10, parseInt(n,10) || 1));
+  const rooms = state.form.rooms;
+  while(rooms.length < n) rooms.push(emptyRoom());
+  while(rooms.length > n) rooms.pop();
+  state.form.numRooms = n;
+  state.fieldErrors = {};
+  render();
+}
+/* Lets a guest remove a specific room card directly (e.g. added by mistake)
+   rather than only being able to trim from the end via the rooms stepper. */
+function removeRoomRow(idx){
+  if(state.form.rooms.length <= 1){
+    window.alert('At least one room is required.');
+    return;
+  }
+  state.form.rooms.splice(idx, 1);
+  state.form.numRooms = state.form.rooms.length;
+  state.fieldErrors = {};
+  render();
+}
+function addChild(roomIdx){
+  const room = state.form.rooms[roomIdx];
+  if(room.children.length >= 3){
+    window.alert('Maximum 3 children per room. Please add another room for more children.');
+    return;
+  }
+  room.children.push({ age:1 });
+  render();
+}
+function removeChildRow(roomIdx, childIdx){
+  state.form.rooms[roomIdx].children.splice(childIdx,1);
+  render();
+}
+/* Attempts to open the native time picker right after a date is chosen, so
+   picking arrival/departure feels like one continuous action. showPicker()
+   is a newer browser API (good support on Android Chrome; inconsistent on
+   iOS Safari) — where it's unsupported or blocked, this silently does
+   nothing and the guest just taps the time field manually instead. */
+function openTimePicker(id){
+  const el = document.getElementById(id);
+  if(el && typeof el.showPicker === 'function'){
+    try { el.showPicker(); } catch(e) { /* not invoked from a direct user gesture, or unsupported — ignore */ }
+  }
+}
+function updateField(path, value){
+  // path like "contactName" or "rooms.0.adults"
+  const parts = path.split('.');
+  let obj = state.form;
+  for(let i=0;i<parts.length-1;i++){
+    const key = isNaN(parts[i]) ? parts[i] : parseInt(parts[i],10);
+    obj = obj[key];
+  }
+  const lastKey = parts[parts.length-1];
+  obj[lastKey] = value;
+}
+
+function renderRoomCard(room, idx){
+  return `
+  <div class="bg-white rounded-2xl border border-mess-100 p-3 mb-2">
+    <div class="flex items-center justify-between mb-2">
+      <div class="font-display text-sm font-semibold text-mess-800 uppercase tracking-wide">Room ${idx+1}</div>
+      ${state.form.rooms.length>1 ? `<button type="button" onclick="removeRoomRow(${idx})" aria-label="Remove room ${idx+1}" class="shrink-0 w-7 h-7 rounded-full bg-red-50 text-red-600 flex items-center justify-center text-sm font-bold">&times;</button>` : ''}
+    </div>
+
+    <div class="mb-2">
+      <label for="room${idx}Start" class="text-[11px] font-medium text-mess-600 mb-1 block">Arrival</label>
+      <div class="flex gap-2 mb-0.5">
+        <div class="flex-1 min-w-0 text-[10px] text-mess-400 px-0.5">Date</div>
+        <div class="w-28 shrink-0 text-[10px] text-mess-400 px-0.5">Time</div>
+      </div>
+      <div class="flex gap-2">
+        <input id="room${idx}Start" type="date" value="${room.startDate}" min="${todayISO()}" onchange="updateField('rooms.${idx}.startDate', this.value); openTimePicker('room${idx}StartTime')" class="flex-1 min-w-0 border ${state.fieldErrors['room.'+idx+'.startDate']?'field-error':'border-mess-200'} rounded-lg px-2 py-1.5 text-sm">
+        <input id="room${idx}StartTime" type="time" value="${room.startTime}" onchange="updateField('rooms.${idx}.startTime', this.value)" class="w-28 shrink-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm">
+      </div>
+      ${state.fieldErrors['room.'+idx+'.startDate'] ? `<div class="field-error-msg">${state.fieldErrors['room.'+idx+'.startDate']}</div>` : ''}
+    </div>
+
+    <div class="mb-2">
+      <label for="room${idx}End" class="text-[11px] font-medium text-mess-600 mb-1 block">Departure</label>
+      <div class="flex gap-2 mb-0.5">
+        <div class="flex-1 min-w-0 text-[10px] text-mess-400 px-0.5">Date</div>
+        <div class="w-28 shrink-0 text-[10px] text-mess-400 px-0.5">Time</div>
+      </div>
+      <div class="flex gap-2">
+        <input id="room${idx}End" type="date" value="${room.endDate}" min="${room.startDate||todayISO()}" onchange="updateField('rooms.${idx}.endDate', this.value); openTimePicker('room${idx}EndTime')" class="flex-1 min-w-0 border ${state.fieldErrors['room.'+idx+'.endDate']?'field-error':'border-mess-200'} rounded-lg px-2 py-1.5 text-sm">
+        <input id="room${idx}EndTime" type="time" value="${room.endTime}" onchange="updateField('rooms.${idx}.endTime', this.value)" class="w-28 shrink-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm">
+      </div>
+      ${state.fieldErrors['room.'+idx+'.endDate'] ? `<div class="field-error-msg">${state.fieldErrors['room.'+idx+'.endDate']}</div>` : ''}
+    </div>
+
+    <div class="mb-2">
+      <div class="text-[11px] font-medium text-mess-600 mb-1">Number of adults</div>
+      <div class="flex items-center gap-2 border border-mess-200 rounded-lg px-1.5 py-1 bg-mess-50/40 w-32">
+        <button type="button" onclick="adjustAdults(${idx}, -1)" class="stepper-btn rounded-md bg-white border border-mess-200 text-mess-700">&minus;</button>
+        <div class="flex-1 text-center text-sm font-mono-num font-semibold text-mess-900">${room.adults}</div>
+        <button type="button" onclick="adjustAdults(${idx}, 1)" class="stepper-btn rounded-md bg-white border border-mess-200 text-mess-700">+</button>
+      </div>
+      ${state.fieldErrors['room.'+idx+'.adults'] ? `<div class="field-error-msg">${state.fieldErrors['room.'+idx+'.adults']}</div>` : ''}
+      <label class="flex items-center gap-2 mt-2">
+        <input type="checkbox" ${room.extraBedding?'checked':''} onchange="toggleExtraBedding(${idx}, this.checked)">
+        <span class="text-[11px] text-mess-600">Extra bedding required</span>
+      </label>
+    </div>
+
+    <div class="flex items-center justify-between mb-1.5">
+      <div class="text-[11px] font-medium text-mess-600">Children</div>
+      <button type="button" onclick="addChild(${idx})" class="text-[11px] font-semibold text-mess-700 shrink-0">+ Add child</button>
+    </div>
+    ${room.children.map((c,ci)=>`
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-[11px] text-mess-500 shrink-0">Age</span>
+        <select onchange="updateField('rooms.${idx}.children.${ci}.age', parseInt(this.value,10))" class="shrink-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+          <option value="0" ${c.age===0?'selected':''}>Below 1 yr</option>
+          ${Array.from({length:18},(_,n)=>n+1).map(age=>`<option value="${age}" ${c.age===age?'selected':''}>${age}</option>`).join('')}
+        </select>
+        <span class="text-[10px] text-mess-400 shrink-0">yrs</span>
+        <button type="button" onclick="removeChildRow(${idx},${ci})" aria-label="Remove child" class="shrink-0 ml-auto w-7 h-7 rounded-full bg-red-50 text-red-600 flex items-center justify-center text-sm font-bold">&times;</button>
+      </div>`).join('')}
+  </div>`;
+}
+/* Adults are capped at 3 per room (2 standard + 1 with extra bedding). Going
+   from 2 to 3 asks for confirmation and auto-flags extra bedding; going
+   beyond 3 is blocked outright — a bigger party needs another room, which
+   staff will actually allocate, rather than one room stretched thin. */
+function adjustAdults(idx, delta){
+  const room = state.form.rooms[idx];
+  if(delta > 0){
+    if(room.adults >= 3){
+      window.alert('This room already has the maximum of 3 adults. Please increase "Rooms required" above to add another room for more guests.');
+      return;
+    }
+    if(room.adults === 2){
+      const proceed = window.confirm('Rooms are set up for 2 adults. Add a 3rd adult to this room with extra bedding?');
+      if(!proceed) return;
+      room.adults = 3;
+      room.extraBedding = true;
+      render();
+      return;
+    }
+    room.adults += 1;
+  } else {
+    room.adults = Math.max(1, room.adults - 1);
+  }
+  render();
+}
+function toggleExtraBedding(idx, checked){
+  state.form.rooms[idx].extraBedding = checked;
+  render();
+}
+
+function renderRequestForm(){
+  const f = state.form;
+  const editing = !!state.editingId;
+  return `
+  <div>
+    <button onclick="${editing ? `goTo('requestDetail')` : `goTo('requestGate')`}" class="text-sm text-mess-500 mb-2">&larr; Back</button>
+    <div class="font-display text-lg font-semibold text-mess-900 mb-0.5">${editing ? 'Edit your booking' : 'Booking details'}</div>
+    <div class="text-[12px] text-mess-500 mb-2">${formatPhoneDisplay(state._gatePhoneNormalized)}</div>
+    ${editing && state.editingOriginalStatus==='approved' ? `<div class="text-[12px] text-gold-700 bg-gold-50 border border-gold-200 rounded-xl px-3 py-2 mb-2">Saving changes to a confirmed booking sends it back to the mess for re-confirmation.</div>` : ''}
+
+    ${Object.keys(state.fieldErrors).length ? `<div class="text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl px-3 py-2 mb-2">Please fix the fields highlighted below.</div>` : ''}
+
+    <div class="bg-white rounded-2xl border border-mess-100 p-3 mb-2">
+      <label for="contactNameInput" class="text-xs font-medium text-mess-600">Your name</label>
+      <input id="contactNameInput" value="${f.contactName}" maxlength="60" oninput="updateField('contactName', this.value)" placeholder="Contact person's full name" class="w-full mt-1 border ${state.fieldErrors['contactName']?'field-error':'border-mess-200'} rounded-lg px-3 py-2 text-sm">
+      ${state.fieldErrors['contactName'] ? `<div class="field-error-msg">${state.fieldErrors['contactName']}</div>` : ''}
+
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <div>
+          <label for="purposeSelect" class="text-xs font-medium text-mess-600 block">Purpose of visit</label>
+          <select id="purposeSelect" onchange="updateField('purpose', this.value)" class="w-full mt-1 border border-mess-200 rounded-lg px-2 py-2 text-sm bg-white">
+            ${PURPOSES.map(p=>`<option value="${p.key}" ${f.purpose===p.key?'selected':''}>${p.label}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-mess-600 block">Rooms required</label>
+          <div class="flex items-center gap-1.5 mt-1 border border-mess-200 rounded-lg px-1 py-0.5 bg-mess-50/40">
+            <button type="button" onclick="setNumRooms(${f.numRooms-1})" class="stepper-btn rounded-md bg-white border border-mess-200 text-mess-700 !w-9 !h-9">&minus;</button>
+            <div class="flex-1 text-center text-sm font-mono-num font-semibold text-mess-900">${f.numRooms}</div>
+            <button type="button" onclick="setNumRooms(${f.numRooms+1})" class="stepper-btn rounded-md bg-white border border-mess-200 text-mess-700 !w-9 !h-9">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${f.rooms.map((r,i)=>renderRoomCard(r,i)).join('')}
+
+    <div class="bg-white rounded-2xl border border-mess-100 p-3 mb-3">
+      <label for="remarksInput" class="text-xs font-medium text-mess-600">Remarks (optional)</label>
+      <textarea id="remarksInput" oninput="updateField('remarks', this.value)" maxlength="300" rows="2" placeholder="e.g. early check-in, dietary needs" class="w-full mt-1 border border-mess-200 rounded-lg px-3 py-2 text-sm">${f.remarks}</textarea>
+    </div>
+
+    <button id="submitBtn" onclick="reviewRequest()" class="w-full py-3 rounded-xl bg-mess-800 text-white text-sm font-semibold">${editing ? 'Review changes' : 'Review request'}</button>
+  </div>`;
+}
+
+/* =========================================================================
+   VALIDATION + REVIEW + SUBMIT
+   Everything here runs entirely client-side for now. Field-level errors are
+   shown inline, next to the field that caused them. The pending-count and
+   overlap checks (business rules, not per-field typos) are re-verified
+   fresh against Firestore at the final confirm step — not just at the
+   gate step — in case anything changed while the guest was filling the
+   form. Once Firebase is wired up, this same validation logic stays — only
+   persistRequest()/pendingRequestsByPhone() change their internals.
+   ========================================================================= */
+function validateForm(){
+  const f = state.form;
+  const fieldErrors = {};
+
+  if(!f.contactName.trim()) fieldErrors['contactName'] = 'Enter your name.';
+
+  const phoneCheck = normalizePhone(f.phone);
+  if(!phoneCheck.ok) fieldErrors['phone'] = phoneCheck.reason;
+
+  f.rooms.forEach((r, i)=>{
+    if(!r.startDate) fieldErrors[`room.${i}.startDate`] = 'Select an arrival date.';
+    else if(r.startDate < todayISO()) fieldErrors[`room.${i}.startDate`] = 'Cannot be in the past.';
+
+    if(!r.endDate) fieldErrors[`room.${i}.endDate`] = 'Select a departure date.';
+    else if(r.startDate && r.endDate < r.startDate) fieldErrors[`room.${i}.endDate`] = 'Cannot be before arrival.';
+
+    if((parseInt(r.adults,10)||0) < 1) fieldErrors[`room.${i}.adults`] = 'At least one adult is required.';
+    else if((parseInt(r.adults,10)||0) > 3) fieldErrors[`room.${i}.adults`] = 'Maximum 3 adults per room — please add another room instead.';
+  });
+
+  return { fieldErrors, phoneCheck, hasErrors: Object.keys(fieldErrors).length>0 };
+}
+/* Step 1 of submitting: validate, and if clean, move to a read-only review
+   screen rather than saving immediately — gives the guest a chance to spot
+   a typo before it's recorded. */
+function reviewRequest(){
+  const { fieldErrors, hasErrors } = validateForm();
+  state.fieldErrors = fieldErrors;
+  if(hasErrors){ render(); return; }
+  goTo('requestReview');
+}
+function renderRequestReview(){
+  const f = state.form;
+  const editing = !!state.editingId;
+  const roomsHtml = f.rooms.map((r,i)=>`
+    <div class="bg-mess-50 rounded-xl p-3 mb-2">
+      <div class="text-[11px] font-semibold text-mess-700 uppercase tracking-wide mb-1.5">Room ${i+1}</div>
+      <div class="text-[12px] text-mess-600">${fmtLong(r.startDate)} ${timeOrDefault(r.startTime,DEFAULT_CHECKIN_TIME)} &rarr; ${fmtLong(r.endDate)} ${timeOrDefault(r.endTime,DEFAULT_CHECKOUT_TIME)}</div>
+      <div class="text-[12px] text-mess-600 mt-1">${r.adults} adult${r.adults===1?'':'s'}${r.children.length? ', ' + r.children.length + ' child' + (r.children.length===1?'':'ren') + ' (age ' + r.children.map(c=>c.age).join(', ') + ')' : ''}</div>
+      ${r.extraBedding ? `<div class="text-[11px] text-gold-700 mt-1">+ Extra bedding requested</div>` : ''}
+    </div>`).join('');
+
+  return `
+  <div>
+    <button onclick="goTo('requestForm')" class="text-sm text-mess-500 mb-4">&larr; Edit</button>
+    <div class="font-display text-xl font-semibold text-mess-900 mb-3">Review your request</div>
+
+    <div id="reviewError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl px-3.5 py-2.5 mb-3"></div>
+
+    <div class="bg-white border border-mess-100 rounded-xl p-3.5 mb-2">
+      <div class="text-sm font-medium text-mess-900">${f.contactName}</div>
+      <div class="text-[12px] text-mess-500 mt-0.5">${formatPhoneDisplay(state._gatePhoneNormalized)} &middot; ${(PURPOSES.find(p=>p.key===f.purpose)||{}).label||f.purpose}</div>
+    </div>
+
+    ${roomsHtml}
+
+    ${f.remarks ? `<div class="bg-white border border-mess-100 rounded-xl p-3 mb-3"><div class="text-[11px] text-mess-400 mb-0.5">Remarks</div><div class="text-[12px] text-mess-700">${f.remarks}</div></div>` : ''}
+
+    <button id="confirmBtn" onclick="confirmSubmit()" class="w-full py-3.5 rounded-xl bg-mess-800 text-white text-sm font-semibold">${editing ? 'Confirm changes' : 'Confirm & submit'}</button>
+    <button onclick="goTo('requestForm')" class="w-full mt-2 py-3 rounded-xl border border-mess-200 text-mess-700 text-sm font-semibold">Go back and edit</button>
+  </div>`;
+}
+/* Step 2: the actual business-rule checks (pending limit, overlap) and
+   the persistence itself — separated from field validation because these
+   can only be checked meaningfully once the form is otherwise clean. */
+async function confirmSubmit(){
+  if(state.submitting) return; // debounce: prevent double-tap double submission
+  const { phoneCheck } = validateForm();
+  const errBox = document.getElementById('reviewError');
+
+  const phone = phoneCheck.value;
+  const f = state.form;
+  const newSpan = { start: f.rooms.map(r=>r.startDate).sort()[0], end: f.rooms.map(r=>r.endDate).sort().slice(-1)[0] };
+  const editingId = state.editingId;
+
+  const btn = document.getElementById('confirmBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Checking availability…'; }
+
+  // Pending checks always exclude the record being edited itself — editing
+  // a request isn't "another" request competing for the same slot.
+  const pendingNow = (await pendingRequestsByPhone(phone)).filter(r=>r.id!==editingId);
+  if(pendingNow.length >= MAX_PENDING_PER_PHONE){
+    errBox.textContent = `You have ${pendingNow.length} other pending requests on this number — please wait for one to be confirmed or cancelled first.`;
+    errBox.classList.remove('hidden');
+    if(btn){ btn.disabled = false; btn.textContent = editingId ? 'Confirm changes' : 'Confirm & submit'; }
+    return;
+  }
+  const overlapsPending = pendingNow.some(p=>{
+    const s = requestSpan(p);
+    return spansOverlap(newSpan.start, newSpan.end, s.start, s.end);
+  });
+  if(overlapsPending){
+    errBox.textContent = `Your dates overlap another request you already have pending. Adjust the dates, or wait until that one is confirmed or cancelled.`;
+    errBox.classList.remove('hidden');
+    if(btn){ btn.disabled = false; btn.textContent = editingId ? 'Confirm changes' : 'Confirm & submit'; }
+    return;
+  }
+  errBox.classList.add('hidden');
+
+  // Soft flag only (not blocking) against confirmed bookings under this
+  // phone — surfaced to staff, not the guest.
+  const confirmedBookings = await confirmedBookingsByPhone(phone);
+  const overlapsConfirmed = confirmedBookings.some(b=>spansOverlap(newSpan.start,newSpan.end,b.startDate,b.endDate));
+
+  state.submitting = true;
+  if(btn){ btn.textContent = editingId ? 'Saving…' : 'Submitting…'; }
+
+  const roomsPayload = f.rooms.map(r=>({
+    adults: parseInt(r.adults,10)||0,
+    extraBedding: !!r.extraBedding,
+    children: r.children.map(c=>({ age: parseInt(c.age,10)||0 })),
+    startDate: r.startDate, endDate: r.endDate,
+    startTime: timeOrDefault(r.startTime, DEFAULT_CHECKIN_TIME),
+    endTime: timeOrDefault(r.endTime, DEFAULT_CHECKOUT_TIME),
+  }));
+
+  try{
+    if(editingId){
+      /* TODO: if the original status was 'approved', the real room
+         booking(s) in the main app's `bookings` collection need to be
+         released/re-flagged too, not just this request document — an
+         edited confirmed booking shouldn't silently keep holding a room
+         under the old dates while showing 'pending' here. That requires
+         either a Cloud Function trigger or the admin app handling it when
+         it next syncs; left as a known gap for now. */
+      const existing = (state.statusResults||[]).find(r=>r.id===editingId);
+      const wasApproved = existing && existing.status === 'approved';
+      const patch = {
+        contactName: f.contactName.trim(),
+        purpose: f.purpose,
+        remarks: f.remarks.trim(),
+        rooms: roomsPayload,
+        overlapsExisting: overlapsConfirmed,
+        status: 'pending', // any edit — including to a confirmed booking — goes back to pending for staff to re-confirm
+        editedAt: new Date().toISOString(),
+      };
+      if(wasApproved) patch.previousStatus = 'approved';
+      await updateRequestDoc(phone, editingId, patch);
+
+      state.submitting = false;
+      state.editingId = null;
+      state.viewingRequestId = editingId;
+      state.statusResults = await requestsByPhone(phone);
+      goTo('requestDetail');
+      return;
+    }
+
+    const reqObj = {
+      id: uid('req'),
+      contactName: f.contactName.trim(),
+      phone,
+      purpose: f.purpose,
+      remarks: f.remarks.trim(),
+      rooms: roomsPayload,
+      status: 'pending',
+      overlapsExisting: overlapsConfirmed,
+      createdAt: new Date().toISOString(),
+      resultingBookingIds: [],
+    };
+    await persistRequest(reqObj);
+
+    state.submitting = false;
+    goTo('requestSuccess');
+  }catch(e){
+    console.error('Submit failed', e);
+    state.submitting = false;
+    errBox.textContent = 'Something went wrong submitting this — check your connection and try again.';
+    errBox.classList.remove('hidden');
+    if(btn){ btn.disabled = false; btn.textContent = editingId ? 'Confirm changes' : 'Confirm & submit'; }
+  }
+}
+
+function renderRequestSuccess(){
+  return `
+  <div class="text-center pt-6">
+    <div class="w-16 h-16 rounded-full bg-mess-50 text-mess-700 flex items-center justify-center text-3xl mx-auto mb-4 pop-in">&#10003;</div>
+    <div class="font-display text-xl font-semibold text-mess-900 mb-1">Request submitted</div>
+    <div class="text-sm text-mess-500 mb-6 px-2">Check status anytime using your phone number.</div>
+    <button onclick="goTo('landing')" class="w-full py-3 rounded-xl bg-mess-800 text-white text-sm font-semibold">Back to home</button>
+  </div>`;
+}
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+render();
+</script>
+</body>
+</html>

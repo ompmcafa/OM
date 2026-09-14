@@ -1,0 +1,3009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<title>Accomodation Manager</title>
+<meta name="description" content="Room booking and accommodation management for Officers Mess, Air Force Academy.">
+<meta name="theme-color" content="#122d5e">
+
+<!-- ===================== PWA / "ADD TO HOME SCREEN" SETUP =====================
+     Together these three pieces (manifest + icons + apple meta tags) make the
+     app installable with its own icon, and make it launch full-screen with no
+     browser address bar/tab chrome on both Android (via the manifest's
+     "display":"standalone") and iOS (via apple-mobile-web-app-capable). -->
+<link rel="manifest" href="manifest.webmanifest">
+
+<!-- Standard + maskable icons (installer picks whichever the platform needs) -->
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="shortcut icon" href="favicon.ico">
+
+<!-- iOS: Safari ignores the manifest for icon/fullscreen behaviour, so these
+     meta tags are required for a proper full-screen "Add to Home Screen" app -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Accn Manager">
+
+<!-- Windows tile color (Edge "pin to Start") -->
+<meta name="msapplication-TileColor" content="#122d5e">
+<meta name="msapplication-TileImage" content="icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          display: ['Oswald', 'sans-serif'],
+          body: ['Inter', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        colors: {
+          mess: {
+            50:  '#eef3fb', 100: '#d7e3f5', 200: '#b0c7ec', 300: '#7fa3de', 400: '#4d7dce',
+            500: '#2f5fb8', 600: '#1f4694', 700: '#173a7a', 800: '#122d5e', 900: '#0c1f42',
+          },
+          brass: {
+            50:  '#eaf6fd', 100: '#cceaf9', 200: '#99d5f3', 300: '#5bb9ea', 400: '#2ea1de',
+            500: '#1c8cc9', 600: '#156fa1', 700: '#125a83', 800: '#0f4868', 900: '#0a3147',
+          },
+          status: { livingin: '#7C5CBF', td: '#0891B2', leave: '#3F9A63', guest: '#D9932A', vip: '#B3542E' }
+        },
+        boxShadow: { tab: '0 -1px 0 rgba(12,31,66,0.08), 0 -6px 16px -8px rgba(12,31,66,0.18)' }
+      }
+    }
+  }
+</script>
+<style>
+  html, body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; height: 100%; }
+  body { font-family: 'Inter', sans-serif; background:#f5f7fb; margin: 0; }
+
+  /* ===================== APP SHELL HEIGHT =====================
+     #app is a fixed-viewport-height flex column (header, then the
+     sidebar+content row filling everything else — see the markup).
+     This is what makes #app-content (and, inside the Gantt tab, the
+     grid itself) genuinely SCROLL, rather than the whole page scrolling
+     — which in turn is what makes position:sticky headers actually
+     freeze during a vertical scroll instead of just scrolling away.
+     100dvh is preferred (accounts for mobile browser/PWA chrome that
+     shows/hides on scroll); browsers without dvh support silently keep
+     the 100vh rule above it, since an unsupported value is dropped. */
+  #app { height: 100vh; }
+  @supports (height: 100dvh) { #app { height: 100dvh; } }
+
+  /* On tablet/laptop the app widens into a centered "card" (see #app's
+     lg:max-w-6xl) rather than stretching edge-to-edge — this backdrop gives
+     that card something to sit on so wide viewports don't just look like a
+     mobile layout with wasted margins. */
+  @media (min-width: 1024px) {
+    body { background: linear-gradient(180deg, #e7edf8 0%, #eef1f7 340px, #eef1f7 100%); }
+    #app { border-radius: 20px; margin-top: 20px; margin-bottom: 20px; height: calc(100vh - 40px); box-shadow: 0 20px 50px -20px rgba(12,31,66,0.35); }
+    @supports (height: 100dvh) { #app { height: calc(100dvh - 40px); } }
+    #app > header.safe-top { padding-top: 0; }
+  }
+  .font-display { font-family: 'Oswald', sans-serif; }
+  .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+  ::-webkit-scrollbar { height: 6px; width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #b0c7ec; border-radius: 4px; }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .gantt-cell { min-width: 40px; }
+  .gantt-name-col { position: sticky; left: 0; z-index: 6; }
+  .modal-backdrop { backdrop-filter: blur(2px); }
+  @keyframes toastIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform: translateY(0);} }
+  .toast-anim { animation: toastIn .18s ease-out; }
+  .tab-active { color: #122d5e; }
+  .tab-inactive { color: #9aa7bd; }
+  .ring-track { transition: stroke-dashoffset .6s ease; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.3); }
+  .accordion-open .chev { transform: rotate(90deg); }
+  .scrollbar-none::-webkit-scrollbar{ display:none; }
+  .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+  fieldset:disabled, input:disabled, select:disabled { cursor: not-allowed; }
+</style>
+</head>
+<body class="font-body text-mess-900 antialiased">
+
+<!-- ===================== LOGIN SCREEN ===================== -->
+<div id="loginScreen" class="fixed inset-0 z-[100] bg-mess-800 flex items-center justify-center px-6 safe-top safe-bottom">
+  <div class="w-full max-w-sm bg-white rounded-2xl p-6 shadow-xl">
+    <div class="flex flex-col items-center mb-5">
+      <div class="w-12 h-12 rounded-full bg-brass-500 flex items-center justify-center font-display font-bold text-white text-lg mb-2">AM</div>
+      <div class="font-display uppercase tracking-wide text-base font-semibold text-mess-800">Accomodation Manager</div>
+      <div class="text-[11px] text-mess-500">Officers Mess &middot; Sign in</div>
+    </div>
+    <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-3">
+      <div id="loginError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg px-3 py-1.5"></div>
+      <div>
+        <label class="text-xs font-medium text-mess-600">Username</label>
+        <div class="flex items-stretch mt-0.5 border border-mess-200 rounded-lg overflow-hidden focus-within:border-mess-400">
+          <select id="li_username" required class="flex-1 min-w-0 px-3 py-2 text-sm outline-none bg-white">
+            <option value="" disabled selected>Select user</option>
+            <option value="pmc">pmc</option>
+            <option value="messsec">messsec</option>
+            <option value="accnmember">accnmember</option>
+            <option value="messmanager">messmanager</option>
+          </select>
+          <span class="flex items-center px-2 text-xs text-mess-400 bg-mess-50 border-l border-mess-200 whitespace-nowrap">@omafa.in</span>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-mess-600">Password</label>
+        <input id="li_password" type="password" required autocomplete="current-password" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <button type="submit" id="loginSubmitBtn" class="w-full py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold mt-1">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<div id="dataLoadingScreen" class="fixed inset-0 z-[95] bg-mess-800 flex items-center justify-center px-6 hidden safe-top safe-bottom">
+  <div class="flex flex-col items-center gap-3 text-white">
+    <div class="w-10 h-10 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+    <div class="text-sm text-mess-100">Loading mess data…</div>
+  </div>
+</div>
+
+<div id="app" class="flex flex-col max-w-2xl md:max-w-3xl lg:max-w-6xl mx-auto bg-[#f5f7fb] relative overflow-hidden">
+
+  <!-- ===================== TOP BAR =====================
+       Full-width across every breakpoint; the role switcher and wordmark
+       stay put, only the surrounding app frame widens on tablet/desktop.
+       No longer needs "sticky" — it's a fixed-height flex item at the top
+       of the app shell (see #app's height in <style>), it never scrolls. -->
+  <header class="safe-top shrink-0 z-40 bg-mess-800 text-white shadow-md">
+    <div class="flex items-center justify-between px-4 lg:px-6 pt-3 pb-2 lg:py-3">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-full bg-brass-500 flex items-center justify-center font-display font-bold text-white text-sm">AM</div>
+        <div class="leading-tight">
+          <div class="font-display uppercase tracking-wide text-[15px] font-semibold">Accomodation Manager</div>
+          <div class="text-[10px] text-mess-200 -mt-0.5">Officers Mess &middot; Bookings</div>
+        </div>
+      </div>
+      <button onclick="openRoleSheet()" id="roleBtn" class="flex items-center gap-1.5 bg-mess-700/70 hover:bg-mess-700 border border-mess-600 rounded-full pl-2 pr-1 py-1 text-xs">
+        <span id="roleLabel" class="font-medium"></span>
+        <span class="w-5 h-5 rounded-full bg-brass-500 text-white flex items-center justify-center text-[10px]">▾</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================== BODY: SIDEBAR (lg+) + MAIN CONTENT =====================
+       This row fills all remaining height below the header (flex-1 min-h-0
+       inside the fixed-height #app shell). #app-content is the ONE real
+       scrolling region for most tabs; the Gantt tab additionally splits
+       itself into its own fixed-header + scrolling-body layout inside that
+       region (see renderGantt) so headers can freeze on vertical scroll
+       too, the same way the room-name column already freezes on
+       horizontal scroll.
+       Below the laptop breakpoint this is just the content column with a
+       bottom tab bar (mobile/tablet app pattern). At lg+ the bottom bar
+       hides and a persistent left sidebar takes over — the desktop-app
+       pattern, so the wide viewport gets used for navigation instead of
+       stretched-out empty margins. -->
+  <div class="flex-1 flex min-h-0 lg:items-stretch">
+    <nav id="sidebarNav" class="hidden lg:flex flex-col w-56 shrink-0 border-r border-mess-100 bg-white py-4 px-3 overflow-y-auto"></nav>
+    <main id="app-content" class="flex-1 min-w-0 min-h-0 overflow-y-auto pb-24 lg:pb-8"></main>
+  </div>
+
+  <!-- ===================== BOTTOM NAV (mobile / tablet) ===================== -->
+  <nav class="fixed bottom-0 left-0 right-0 z-40 lg:hidden">
+    <div class="max-w-2xl md:max-w-3xl mx-auto bg-white shadow-tab safe-bottom">
+      <div id="bottomNav" class="grid text-[10px]"></div>
+    </div>
+  </nav>
+
+  <!-- ===================== ROLE SHEET ===================== -->
+  <div id="roleSheet" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeRoleSheet()"></div>
+    <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl p-4 safe-bottom" id="roleSheetContent">
+      <div class="w-10 h-1 bg-mess-200 rounded-full mx-auto mb-3"></div>
+      <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-2 px-1">Switch role</div>
+      <div id="roleList" class="space-y-1"></div>
+      <div id="roleSheetAccount" class="mt-3 pt-3 border-t border-mess-100 flex items-center justify-between px-1"></div>
+      <button onclick="handleLogout()" class="w-full mt-2 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-semibold">Log out</button>
+    </div>
+  </div>
+
+  <!-- ===================== BOOKING MODAL ===================== -->
+  <div id="bookingModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeBookingModal()"></div>
+    <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl safe-bottom max-h-[95vh] overflow-y-auto">
+      <div class="sticky top-0 bg-white px-4 pt-3 pb-2 border-b border-mess-100 flex items-center justify-between">
+        <div class="font-display uppercase text-sm font-semibold text-mess-800" id="bookingModalTitle">New booking</div>
+        <button onclick="closeBookingModal()" class="w-8 h-8 rounded-full bg-mess-50 text-mess-700 flex items-center justify-center">✕</button>
+      </div>
+      <form id="bookingForm" onsubmit="saveBooking(event)" class="p-3 space-y-2">
+        <div id="bookingFormError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg px-3 py-1.5"></div>
+        <div id="stayBanner" class="hidden text-xs bg-mess-50 text-mess-700 border border-mess-200 rounded-lg px-3 py-1.5"></div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs font-medium text-mess-600">Name</label>
+            <input id="f_guestName" required placeholder="Occupant's name" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-mess-600">Contact number</label>
+            <input id="f_guestPhone" placeholder="10-digit number" inputmode="numeric" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-medium text-mess-600">Purpose of visit</label>
+          <select id="f_category" required onchange="onCategoryChange()" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="TD">Temporary Duty (TD)</option>
+            <option value="PostingIn">Posting-in</option>
+            <option value="PostedOut">Posted-out</option>
+            <option value="Leave">Leave</option>
+            <option value="LivingIn">Living-in</option>
+            <option value="OfficialGuest">Official Guest</option>
+            <option value="GuestFamily">Guest / Family / Self</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-xs font-medium text-mess-600">Remarks / additional info</label>
+          <textarea id="f_remarks" rows="1" placeholder="Optional" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-1.5 text-sm"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs font-medium text-mess-600">Arrival</label>
+            <div class="flex gap-1 mt-0.5">
+              <input type="date" id="f_startDate" required onchange="refreshRoomOptions(document.getElementById('f_roomId').value)" class="flex-1 min-w-0 border border-mess-200 rounded-lg px-2 py-2 text-sm">
+              <input type="time" id="f_startTime" class="w-[84px] shrink-0 border border-mess-200 rounded-lg px-1 py-2 text-sm">
+            </div>
+          </div>
+          <div id="f_departureWrap">
+            <label class="text-xs font-medium text-mess-600">Departure</label>
+            <div class="flex gap-1 mt-0.5">
+              <input type="date" id="f_endDate" onchange="refreshRoomOptions(document.getElementById('f_roomId').value)" class="flex-1 min-w-0 border border-mess-200 rounded-lg px-2 py-2 text-sm">
+              <input type="time" id="f_endTime" class="w-[84px] shrink-0 border border-mess-200 rounded-lg px-1 py-2 text-sm">
+            </div>
+          </div>
+        </div>
+        <div class="text-[10px] text-mess-400 -mt-1 px-0.5">Time left blank defaults to 1400 Hrs check-in / 1200 Hrs check-out.</div>
+
+        <label id="f_openEndedWrap" class="hidden bg-mess-50 border border-mess-100 rounded-lg px-3 py-2">
+          <div class="flex items-start gap-2">
+            <input type="checkbox" id="f_openEnded" class="mt-0.5" onchange="onOpenEndedToggle()">
+            <span class="text-xs text-mess-700">
+              <span class="font-medium">No checkout date yet</span>
+              <span class="text-mess-500"> — stays until posted out; edit the booking later to close it out</span>
+            </span>
+          </div>
+        </label>
+
+        <label class="flex items-start gap-2 bg-mess-50 border border-mess-100 rounded-lg px-3 py-2">
+          <input type="checkbox" id="f_sharing" class="mt-0.5" onchange="onSharingToggle()">
+          <span class="text-xs text-mess-700">
+            <span class="font-medium">Book on sharing basis</span>
+            <span class="text-mess-500"> — share with one other occupant</span>
+          </span>
+        </label>
+
+        <div id="occupant2Wrap" class="hidden space-y-2 border border-mess-100 rounded-lg p-2.5 bg-mess-50/60">
+          <div class="text-xs font-semibold text-mess-700">Second occupant</div>
+          <div class="grid grid-cols-2 gap-2">
+            <input id="f_guestName2" placeholder="Occupant's name" class="w-full border border-mess-200 rounded-lg px-3 py-2 text-sm">
+            <input id="f_guestPhone2" placeholder="Contact number" inputmode="numeric" class="w-full border border-mess-200 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-[11px] font-medium text-mess-600">Arrival</label>
+              <div class="flex gap-1 mt-0.5">
+                <input type="date" id="f_startDate2" class="flex-1 min-w-0 border border-mess-200 rounded-lg px-2 py-2 text-sm">
+                <input type="time" id="f_startTime2" class="w-[84px] shrink-0 border border-mess-200 rounded-lg px-1 py-2 text-sm">
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-medium text-mess-600">Departure</label>
+              <div class="flex gap-1 mt-0.5">
+                <input type="date" id="f_endDate2" class="flex-1 min-w-0 border border-mess-200 rounded-lg px-2 py-2 text-sm">
+                <input type="time" id="f_endTime2" class="w-[84px] shrink-0 border border-mess-200 rounded-lg px-1 py-2 text-sm">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="segmentList" class="hidden"></div>
+
+        <div>
+          <label class="text-xs font-medium text-mess-600">Room</label>
+          <select id="f_roomId" required class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white"></select>
+        </div>
+
+        <button type="button" id="addPeriodBtn" onclick="addAnotherPeriod()" class="hidden w-full py-2 rounded-xl border border-dashed border-mess-300 text-mess-700 text-xs font-semibold">
+          + Add another room period (continue stay in a different room)
+        </button>
+
+        <div class="flex gap-2 pt-1">
+          <button type="button" onclick="closeBookingModal()" class="flex-1 py-2.5 rounded-xl border border-mess-200 text-mess-700 text-sm font-medium">Cancel</button>
+          <button type="submit" id="bookingSubmitBtn" class="flex-1 py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold">Save booking</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== BOOKING DETAIL / CELL MODAL ===================== -->
+  <div id="detailModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeDetailModal()"></div>
+    <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl p-4 safe-bottom max-h-[85vh] overflow-y-auto">
+      <div id="detailModalBody"></div>
+    </div>
+  </div>
+
+  <!-- ===================== WHATSAPP MODAL ===================== -->
+  <div id="waModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeWaModal()"></div>
+    <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl p-4 safe-bottom">
+      <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-2">WhatsApp intimation</div>
+      <textarea id="waText" rows="7" class="w-full border border-mess-200 rounded-lg p-3 text-sm font-mono-num bg-mess-50"></textarea>
+      <div id="waPhoneWarn" class="hidden text-[11px] text-red-600 mt-1 px-0.5">No contact number on file for this occupant — add one by editing the booking.</div>
+      <div id="waPhoneOk" class="text-[11px] text-mess-500 mt-1 px-0.5">Sent to the occupant's contact number.</div>
+      <div class="flex gap-2 mt-3">
+        <button onclick="closeWaModal()" class="flex-1 py-3 rounded-xl border border-mess-200 text-mess-700 text-sm font-medium">Close</button>
+        <a id="waLink" href="#" target="_blank" class="flex-1 py-3 rounded-xl bg-[#25D366] text-white text-sm font-semibold text-center">Open WhatsApp</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ROOM MODAL (Admin: add/edit room) ===================== -->
+  <div id="roomModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeRoomModal()"></div>
+    <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl safe-bottom max-h-[92vh] overflow-y-auto">
+      <div class="sticky top-0 bg-white px-4 pt-3 pb-2 border-b border-mess-100 flex items-center justify-between">
+        <div class="font-display uppercase text-sm font-semibold text-mess-800" id="roomModalTitle">Add room</div>
+        <button onclick="closeRoomModal()" class="w-8 h-8 rounded-full bg-mess-50 text-mess-700 flex items-center justify-center">✕</button>
+      </div>
+      <form id="roomForm" onsubmit="saveRoom(event)" class="p-4 space-y-3">
+        <div id="roomFormError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg px-3 py-1.5"></div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs font-medium text-mess-600">Room No.</label>
+            <input id="rf_roomNo" required placeholder="e.g. 1" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-mess-600">Block</label>
+            <select id="rf_blockId" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white"></select>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-medium text-mess-600">Type</label>
+          <select id="rf_type" onchange="onRoomTypeChange()" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="vip">VIP Suite</option>
+            <option value="td">TD Room</option>
+            <option value="livingin">Living-in Room</option>
+          </select>
+        </div>
+
+        <div id="rf_suiteNameWrap" class="hidden">
+          <label class="text-xs font-medium text-mess-600">Suite name</label>
+          <input id="rf_suiteName" placeholder="e.g. Rashtrakoot" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm">
+        </div>
+
+        <div>
+          <label class="text-xs font-medium text-mess-600">Status</label>
+          <select id="rf_status" class="w-full mt-0.5 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="available">Available for booking</option>
+            <option value="maintenance">On Maintenance</option>
+          </select>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="closeRoomModal()" class="flex-1 py-2.5 rounded-xl border border-mess-200 text-mess-700 text-sm font-medium">Cancel</button>
+          <button type="submit" id="roomSubmitBtn" class="flex-1 py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold">Save room</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== TOAST ===================== -->
+  <div id="toastHost" class="fixed bottom-24 left-0 right-0 z-[60] flex flex-col items-center gap-2 pointer-events-none"></div>
+
+</div>
+
+<script type="module">
+  /* =========================================================================
+     FIREBASE AUTH — usernames are entered without the @omafa.in suffix;
+     it is appended here before calling Firebase Auth. Exposes a small
+     window-level bridge so the rest of the (non-module) app script can
+     drive sign-in/sign-out without needing to be a module itself.
+     ========================================================================= */
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+  import {
+    getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+    setPersistence, browserLocalPersistence
+  } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+  import {
+    getFirestore, collection, collectionGroup, doc, setDoc, updateDoc, onSnapshot, enableIndexedDbPersistence
+  } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAoi0P3RgI5cjelKMLlC3AyQigtV9j2ZwQ",
+    authDomain: "accomodation-b3799.firebaseapp.com",
+    projectId: "accomodation-b3799",
+    storageBucket: "accomodation-b3799.firebasestorage.app",
+    messagingSenderId: "994810144662",
+    appId: "1:994810144662:web:3894c10b4e28a22f9c5fb7"
+  };
+  const USERNAME_SUFFIX = "@omafa.in";
+
+  const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
+  const fsDb = getFirestore(fbApp);
+  enableIndexedDbPersistence(fsDb).catch((err) => {
+    // Fails silently in multi-tab scenarios or unsupported browsers — the
+    // app still works fully online, it just won't cache offline.
+    console.warn('Firestore offline persistence not enabled:', err && err.code);
+  });
+
+  window.firebaseLogin = async function(username, password){
+    await setPersistence(auth, browserLocalPersistence);
+    const email = String(username || '').trim().toLowerCase() + USERNAME_SUFFIX;
+    return signInWithEmailAndPassword(auth, email, password);
+  };
+  window.firebaseLogout = function(){
+    return signOut(auth);
+  };
+
+  onAuthStateChanged(auth, (user) => {
+    if(typeof window.onAuthStateChangedHandler === 'function'){
+      window.onAuthStateChangedHandler(user);
+    } else {
+      // App script hasn't finished loading yet — retry shortly.
+      const wait = setInterval(() => {
+        if(typeof window.onAuthStateChangedHandler === 'function'){
+          clearInterval(wait);
+          window.onAuthStateChangedHandler(user);
+        }
+      }, 30);
+    }
+  });
+
+  /* =========================================================================
+     FIRESTORE BRIDGE — a small generic API so the main (non-module) app
+     script can read/write Firestore without itself being a module.
+     Every document written carries its own "id" field value as the
+     Firestore document ID (matching the app's existing uid()-based model),
+     via setDoc(doc(collection, id), data).
+     ========================================================================= */
+  window.fsSetDoc = function(collectionName, id, data){
+    return setDoc(doc(fsDb, collectionName, id), data);
+  };
+  /* Subscribes to an entire collection in real time. Callback receives the
+     full current array of { id, ...fields } every time anything in the
+     collection changes (on this device or any other signed-in device). */
+  window.fsOnSnapshot = function(collectionName, callback){
+    return onSnapshot(collection(fsDb, collectionName), (snap) => {
+      const arr = [];
+      snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+      callback(arr);
+    }, (err) => {
+      console.error('Firestore listen error on "' + collectionName + '":', err);
+    });
+  };
+  /* Guest requests live at bookingRequests/{phone}/items/{id} — scoped by
+     phone so guests (unauthenticated) can only ever read/write their own
+     subcollection (see firestore.rules notes). The admin app needs to see
+     EVERY guest's requests at once, which requires a Firestore collection
+     GROUP query across all "items" subcollections regardless of parent —
+     a fundamentally different rule surface than a normal collection read
+     (see the {path=**} wildcard rule), which is why this needed its own
+     bridge function rather than reusing fsOnSnapshot above. */
+  window.fsOnSnapshotGroup = function(groupName, callback){
+    return onSnapshot(collectionGroup(fsDb, groupName), (snap) => {
+      const arr = [];
+      snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+      callback(arr);
+    }, (err) => {
+      console.error('Firestore collection-group listen error on "' + groupName + '":', err);
+    });
+  };
+  /* Writes to a document at an arbitrary nested path (e.g. a specific
+     guest's request) rather than a flat top-level collection. */
+  window.fsUpdateNestedDoc = function(pathSegments, data){
+    return updateDoc(doc(fsDb, ...pathSegments), data);
+  };
+</script>
+
+
+<script>
+/* =========================================================================
+   DATA LAYER — Firestore-backed. DB is an in-memory mirror kept in sync via
+   real-time listeners (see startFirestoreSync); writes go straight to
+   Firestore through persistBooking/persistRoom/persistBlock/persistAuditEntry,
+   and the listeners echo the change back into DB for every signed-in device.
+   ========================================================================= */
+const ROLES = ['Mess Secretary','PMC','Accomodation Member','Mess Manager'];
+const ADMIN_ROLES = ['Mess Secretary','PMC','Accomodation Member'];
+
+/* =========================================================================
+   LOGIN / AUTH
+   Maps the username portion of a Firebase Auth account's email (the part
+   before @omafa.in) to the app role that user should land on after signing
+   in. Add an entry here for every login you create in Firebase Auth.
+   Known so far: pmc@omafa.in -> PMC, messsec@omafa.in -> Mess Secretary.
+   Usernames not listed below still sign in fine (any valid Firebase Auth
+   account works) but default to the first role until mapped here. */
+const USERNAME_ROLE_MAP = {
+  'pmc':          'PMC',
+  'messsec':      'Mess Secretary',
+  'accnmember':   'Accomodation Member',
+  'messmanager':  'Mess Manager',
+};
+let currentAuthUser = null;
+
+async function handleLogin(ev){
+  ev.preventDefault();
+  const errBox = document.getElementById('loginError');
+  errBox.classList.add('hidden');
+  const username = document.getElementById('li_username').value.trim();
+  const password = document.getElementById('li_password').value;
+  if(!username || !password) return;
+  const btn = document.getElementById('loginSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try{
+    if(!window.firebaseLogin) throw { code: 'auth/internal-error' };
+    await window.firebaseLogin(username, password);
+    /* onAuthStateChangedHandler (below) takes over from here once
+       Firebase confirms the session — it hides the login screen and
+       sets the app role. */
+  }catch(err){
+    console.warn('Login failed', err);
+    errBox.textContent = friendlyAuthError(err);
+    errBox.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Sign in';
+  }
+}
+function friendlyAuthError(err){
+  const code = (err && err.code) || '';
+  if(code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) return 'Incorrect username or password.';
+  if(code.includes('too-many-requests')) return 'Too many attempts — please wait and try again.';
+  if(code.includes('network-request-failed')) return 'Network error — check your connection and try again.';
+  if(code.includes('invalid-email')) return 'Enter just the username (no @omafa.in needed).';
+  return 'Sign-in failed. Please try again.';
+}
+function handleLogout(){
+  closeRoleSheet();
+  if(window.firebaseLogout) window.firebaseLogout();
+}
+/* Called by the Firebase module script whenever auth state changes
+   (sign-in, sign-out, or a restored session on page load). */
+window.onAuthStateChangedHandler = function(user){
+  currentAuthUser = user;
+  const loginScreen = document.getElementById('loginScreen');
+  const loadingScreen = document.getElementById('dataLoadingScreen');
+  if(user){
+    const prefix = (user.email || '').split('@')[0].toLowerCase();
+    state.role = USERNAME_ROLE_MAP[prefix] || ROLES[0];
+    if((state.tab==='admin' || state.tab==='requests') && !isAdmin(state.role)) state.tab = 'dashboard';
+    loginScreen.classList.add('hidden');
+    const form = document.getElementById('loginForm');
+    if(form) form.reset();
+    const btn = document.getElementById('loginSubmitBtn');
+    if(btn){ btn.disabled = false; btn.textContent = 'Sign in'; }
+    if(!allCoreDataLoaded()) loadingScreen.classList.remove('hidden');
+    startFirestoreSync();
+    renderChrome();
+    render();
+  } else {
+    loginScreen.classList.remove('hidden');
+    loadingScreen.classList.add('hidden');
+  }
+};
+const CATEGORY_META = {
+  TD:            { label: 'TD',                    color: '#0891B2', bg: '#E3F5F8' },
+  PostingIn:     { label: 'Posting-in',             color: '#2563EB', bg: '#E8EFFD' },
+  PostedOut:     { label: 'Posted-out',             color: '#0F766E', bg: '#E1F3F0' },
+  Leave:         { label: 'Leave',                  color: '#3F9A63', bg: '#EAF6EF' },
+  LivingIn:      { label: 'Living-in',              color: '#7C5CBF', bg: '#EFEAFB' },
+  OfficialGuest: { label: 'Official Guest',         color: '#D9932A', bg: '#FBF1E1' },
+  GuestFamily:   { label: 'Guest / Family / Self',  color: '#DB5A8C', bg: '#FCEAF2' },
+  VIP:           { label: 'VIP Suite',              color: '#B3542E', bg: '#FBEAE3' },
+};
+const CATEGORY_SHORT = {
+  TD: 'T/D', PostingIn: 'Posting-in', PostedOut: 'Posted-out', Leave: 'Leave', LivingIn: 'Living-in',
+  OfficialGuest: 'Official Guest', GuestFamily: 'Guest/Family/Self', VIP: 'VIP',
+};
+/* Booking record status — every booking (including VIP suites) is
+   confirmed immediately on save; the only other permanent state is
+   cancelled. Both are kept as records forever (see isActiveBooking). */
+const BOOKING_STATUS_META = {
+  confirmed: { label: 'Confirmed', color: '#3F9A63', bg: '#EAF6EF' },
+  cancelled: { label: 'Cancelled', color: '#7A8699', bg: '#EEF0F3' },
+};
+/* Reception orderly contact numbers included in every WhatsApp intimation. */
+const RECEPTION_ORDERLIES = [
+  { name: 'Chari', phone: '09550723611' },
+  { name: 'Ajay',  phone: '09542660134' },
+];
+const CELL_W = 40;
+const DATE_ROW_H = 54;
+const SHARING_CAPACITY = 2;
+
+function uid(p){ return (p||'id') + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+/* Phone handling: stored numbers are always either '' (blank allowed) or a
+   validated 10-digit Indian mobile number prefixed as '+91XXXXXXXXXX' — the
+   country code is required for WhatsApp's wa.me links to resolve correctly. */
+function normalizePhone(raw){
+  const trimmed = (raw || '').trim();
+  if(!trimmed) return { ok: true, value: '' };
+  let digits = trimmed.replace(/\D/g, '');
+  if(digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  else if(digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  if(digits.length !== 10 || !/^[6-9]/.test(digits)) return { ok: false, value: null };
+  return { ok: true, value: '+91' + digits };
+}
+function stripCountryCode(p){
+  if(!p) return '';
+  let digits = String(p).replace(/\D/g, '');
+  if(digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  return digits;
+}
+function formatPhoneDisplay(p){
+  if(!p) return '—';
+  if(p.startsWith('+91') && p.length === 13) return '+91 ' + p.slice(3);
+  return p;
+}
+
+/* Check-in/out time handling — an unset time input defaults to these. */
+const DEFAULT_CHECKIN_TIME = '14:00';
+const DEFAULT_CHECKOUT_TIME = '12:00';
+function timeOrDefault(raw, fallback){
+  return (raw && /^\d{2}:\d{2}$/.test(raw)) ? raw : fallback;
+}
+function formatTimeShort(t, fallback){
+  return (t && /^\d{2}:\d{2}$/.test(t)) ? t : fallback;
+}
+function formatTimeHrs(t, fallback){
+  const val = timeOrDefault(t, fallback);
+  return val.replace(':','') + ' Hrs';
+}
+
+function defaultBlocks(){
+  /* Display order: VIP Suites, then Sadanand Block, Naidu Block, AFFWA Block. */
+  return [
+    { id:'vip',      name:'VIP Suites',     prefix:'VIP',count:4,  vip:true,  active:true, order:1 },
+    { id:'sadanand', name:'Sadanand Block', prefix:'SB', count:45, vip:false, active:true, order:2 },
+    { id:'naidu',    name:'Naidu Block',    prefix:'NB', count:34, vip:false, active:true, order:3 },
+    { id:'affwa',    name:'AFFWA Block',    prefix:'AF', count:4,  vip:false, active:true, order:4 },
+  ];
+}
+const VIP_NAMES = ['Rashtrakoot','Kakatiya','Vijaynagara','Satavahana'];
+/* Room Type — separate from a booking's Purpose of visit. Purely a
+   classification of the room itself (used for filtering/colour-coding). */
+const ROOM_TYPES = { vip: 'VIP Suite', td: 'TD Room', livingin: 'Living-in Room' };
+const ROOM_STATUSES = { available: 'Available for booking', maintenance: 'On Maintenance' };
+
+/* Room IDs are deterministic (blockId + room index) rather than random —
+   this makes seeding/top-up idempotent: writing the same room twice just
+   overwrites the same Firestore doc instead of creating a duplicate, so an
+   interrupted seed (e.g. page closed mid-write) can always resume safely
+   on next load without leaving gaps or dupes. Rooms added later by hand
+   via Admin still get a random uid() as usual. */
+function buildRoomsForBlock(block){
+  const rooms = [];
+  for(let i=1;i<=block.count;i++){
+    rooms.push({
+      id: block.id + '-r' + i, blockId: block.id, roomNo: String(i),
+      name: block.vip ? (VIP_NAMES[i-1] || null) : null,
+      type: block.vip ? 'vip' : 'td', status: 'available',
+    });
+  }
+  return rooms;
+}
+
+/* =========================================================================
+   FIRESTORE SYNC
+   DB starts empty and is populated entirely from real-time Firestore
+   listeners once signed in. Each collection listener replaces its slice of
+   DB wholesale with the latest server state, so writes from any
+   signed-in device (including this one) show up everywhere automatically.
+   The app itself never auto-creates default data — blocks/rooms are
+   loaded once via the standalone seed-tool.html, then managed from here
+   on via the normal Admin screen (add room / add block). This avoids the
+   race condition where two devices opening the app at the same moment
+   could each decide the database looked empty and both try to seed it. */
+let DB = { blocks: [], rooms: [], bookings: [], auditLog: [], guestRequests: [], housekeeping: {}, meta: {} };
+const dataLoaded = { blocks: false, rooms: false, bookings: false };
+let firestoreSyncStarted = false;
+
+function allCoreDataLoaded(){ return dataLoaded.blocks && dataLoaded.rooms && dataLoaded.bookings; }
+
+function startFirestoreSync(){
+  if(firestoreSyncStarted) return;
+  firestoreSyncStarted = true;
+
+  window.fsOnSnapshot('blocks', (arr) => {
+    DB.blocks = arr.slice().sort((a,b)=>(a.order||0)-(b.order||0));
+    dataLoaded.blocks = true;
+    onFirestoreDataChanged();
+  });
+  window.fsOnSnapshot('rooms', (arr) => {
+    DB.rooms = arr;
+    dataLoaded.rooms = true;
+    onFirestoreDataChanged();
+  });
+  window.fsOnSnapshot('bookings', (arr) => {
+    DB.bookings = arr;
+    dataLoaded.bookings = true;
+    onFirestoreDataChanged();
+  });
+  window.fsOnSnapshot('auditLog', (arr) => {
+    DB.auditLog = arr.slice().sort((a,c)=>(c.ts||'').localeCompare(a.ts||'')).slice(0,200);
+    onFirestoreDataChanged();
+  });
+  /* Not part of allCoreDataLoaded()'s gate — guest requests are only used
+     by the admin-only Requests tab, so they shouldn't hold up the app's
+     initial loading screen for every role. Requires request.auth to be an
+     @omafa.in account per the {path=**} collection-group rule; safe to
+     start once signed in like everything else here. */
+  window.fsOnSnapshotGroup('items', (arr) => {
+    DB.guestRequests = arr;
+    render();
+  });
+}
+function onFirestoreDataChanged(){
+  if(allCoreDataLoaded()){
+    const loadingScreen = document.getElementById('dataLoadingScreen');
+    if(loadingScreen) loadingScreen.classList.add('hidden');
+  }
+  render();
+}
+
+/* Per-entity Firestore writes. Each object already carries its own "id"
+   (the doc ID); the rest of the object is written as the document body. */
+function persistBooking(b){ const { id, ...data } = b; return window.fsSetDoc('bookings', id, data).catch(err=>console.error('Booking save failed', err)); }
+function persistRoom(r){ const { id, ...data } = r; return window.fsSetDoc('rooms', id, data).catch(err=>console.error('Room save failed', err)); }
+function persistBlock(bl){ const { id, ...data } = bl; return window.fsSetDoc('blocks', id, data).catch(err=>console.error('Block save failed', err)); }
+function persistAuditEntry(entry){ const { id, ...data } = entry; return window.fsSetDoc('auditLog', id, data).catch(err=>console.error('Audit log save failed', err)); }
+
+function logAudit(action, detail){
+  const entry = { id: uid('log'), action, detail, role: state.role, ts: new Date().toISOString() };
+  DB.auditLog.unshift(entry);
+  DB.auditLog = DB.auditLog.slice(0, 200);
+  persistAuditEntry(entry);
+}
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+const state = {
+  role: ROLES[0],
+  tab: 'dashboard',
+  /* Gantt shows a period (default: this month + next month) defined by
+     ganttFrom/ganttTo (ISO dates, inclusive). This is the single source of
+     truth the visible SCROLLING date range is always derived fresh from —
+     it moves only via Prev/Next/swipe, never via the date filter. */
+  ganttFrom: monthStartISO(new Date().getFullYear(), new Date().getMonth()),
+  ganttTo: monthEndISO(new Date().getFullYear(), new Date().getMonth()+1),
+  ganttInitScrolled: false,
+  collapsed: {},
+  ganttSearch: '',
+  /* Room Type filter — always visible, filters which rooms show at all. */
+  ganttTypeFilter: 'all',
+  /* Occupancy status filter — only shown/usable once a duration filter is
+     set below; combines with ganttTypeFilter (e.g. TD + Vacant). */
+  ganttStatusFilter: '',
+  /* Duration filter — independent of ganttFrom/ganttTo. When both are set,
+     the grid narrows to exactly this range, and the Vacant/Occupied chips
+     become available to check room availability across it. */
+  filterFrom: '',
+  filterTo: '',
+  movementFilter: 'all',
+  recordsSearch: '',
+  recordsStatusFilter: 'all',
+  waBookingId: null,
+  /* Draft room allocations for the Requests tab — keyed by request id, an
+     array parallel to that request's rooms[]. Nothing here is booked until
+     an explicit Approve action (a later step) reads it. Cleared implicitly
+     when a request leaves 'pending' status (approved/rejected elsewhere). */
+  requestAllocations: {},
+  rejectingId: null,
+  requestsStatusFilter: 'pending',
+  expandedRequestIds: {},
+};
+/* Staged room periods for a NEW multi-room stay being composed in the
+   booking modal (cleared once the booking is saved or the modal reopened). */
+let draftSegments = [];
+
+/* =========================================================================
+   DATE HELPERS
+   ========================================================================= */
+function startOfDay(d){ const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function toISO(d){ const x = new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
+function fromISO(iso){ const [y,m,d] = iso.split('-').map(Number); return new Date(y, m-1, d); }
+function todayISO(){ return toISO(new Date()); }
+function fmtShort(d){ return (typeof d==='string'?fromISO(d):d).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
+function fmtDMY2(iso){
+  const d = fromISO(iso);
+  const day = String(d.getDate()).padStart(2,'0');
+  const month = d.toLocaleDateString('en-GB',{month:'short'});
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day} ${month} ${year}`;
+}
+function fmtWeekday(d){ return d.toLocaleDateString('en-GB',{weekday:'short'}); }
+function fmtLong(d){ return (typeof d==='string'?fromISO(d):d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function daysBetween(aISO, bISO){ return Math.round((fromISO(bISO)-fromISO(aISO))/86400000); }
+
+/* A Living-in booking can have endDate === null — staff allot the room
+   without knowing when the occupant will be posted out. Every date-range
+   comparison below treats null as "no upper bound" (occupies indefinitely,
+   until staff later edit the booking to add a real checkout date). */
+function lastOccupiedNight(b){
+  if(!b.endDate) return null;
+  if(b.startDate === b.endDate) return b.startDate;
+  return toISO(addDays(fromISO(b.endDate), -1));
+}
+function isOccupiedOn(b, dateISO){
+  const last = lastOccupiedNight(b);
+  return dateISO >= b.startDate && (last===null || dateISO <= last);
+}
+/* A booking counts as "live" (occupies a room, shows in searches/records
+   as an active stay) unless it was cancelled — cancelled bookings are kept
+   permanently as records, never hard-deleted, just excluded from
+   occupancy/availability logic. */
+function isActiveBooking(b){ return b.status!=='cancelled'; }
+/* null for either "last night" argument means "no upper bound" — an
+   open-ended stay overlaps anything that starts on or after its own start
+   date, with nothing on the calendar ever being "after" it. */
+function rangesOverlap(startA, lastNightA, startB, lastNightB){
+  const aWithinB = (lastNightB===null) ? true : (startA <= lastNightB);
+  const bWithinA = (lastNightA===null) ? true : (startB <= lastNightA);
+  return aWithinB && bWithinA;
+}
+/* Computes a candidate range's own "last occupied night" the same way
+   lastOccupiedNight() does for a saved booking — a blank/falsy endISO
+   (the open-ended case) yields null, not a crash. */
+function lastNightFor(startISO, endISO){
+  if(!endISO) return null;
+  return (startISO===endISO) ? startISO : toISO(addDays(fromISO(endISO), -1));
+}
+/* endDate is only ever null for a genuinely open-ended (Living-in) stay —
+   display code uses this instead of assuming every booking has one. */
+function fmtEndDateShort(endDate){ return endDate ? fmtShort(endDate) : 'Ongoing'; }
+function fmtEndDateLong(endDate){ return endDate ? fmtLong(endDate) : 'Ongoing'; }
+
+/* =========================================================================
+   HELPERS: rooms / blocks / bookings
+   ========================================================================= */
+function getBlock(id){ return DB.blocks.find(b=>b.id===id); }
+function getRoom(id){ return DB.rooms.find(r=>r.id===id); }
+/* Reconstructs the combined display number (e.g. "SB-1") from the room's
+   own roomNo plus its block's prefix — kept separate in the data model so
+   Room No. and Block can each be edited independently. */
+function roomFullNumber(room){
+  if(!room) return '—';
+  const block = getBlock(room.blockId);
+  return (block ? block.prefix : '') + '-' + room.roomNo;
+}
+function roomLabel(room){ if(!room) return '—'; return room.type==='vip' ? (room.name + ' (' + roomFullNumber(room) + ')') : roomFullNumber(room); }
+function activeRooms(){ return DB.rooms; }
+/* Firestore doesn't preserve insertion order the way the old localStorage
+   array did, so room order within a block must be sorted explicitly here
+   rather than relying on array/document order — this is the one place
+   nearly every room listing (Gantt, Admin, the booking room picker) goes
+   through, so fixing it here fixes room ordering everywhere. */
+function roomsForBlock(blockId){
+  return DB.rooms.filter(r=>r.blockId===blockId)
+    .sort((a,b)=> (parseInt(a.roomNo,10)||0) - (parseInt(b.roomNo,10)||0));
+}
+function isAdmin(role){ return ADMIN_ROLES.includes(role); }
+
+function bookingsOnDate(roomId, dateISO){
+  return DB.bookings.filter(b => b.roomId===roomId && isActiveBooking(b) && isOccupiedOn(b, dateISO));
+}
+function bookingOnDate(roomId, dateISO){ return bookingsOnDate(roomId, dateISO)[0]; }
+
+function overlappingBookings(roomId, startISO, endISO, excludeId){
+  const lastNight = lastNightFor(startISO, endISO);
+  return DB.bookings.filter(b => {
+    if(b.roomId!==roomId || !isActiveBooking(b) || b.id===excludeId) return false;
+    return rangesOverlap(startISO, lastNight, b.startDate, lastOccupiedNight(b));
+  });
+}
+function conflictCheck(roomId, startISO, endISO, excludeId, sharing){
+  const overlaps = overlappingBookings(roomId, startISO, endISO, excludeId);
+  if(overlaps.length===0) return null;
+  if(!sharing) return `${roomLabel(getRoom(roomId))} is already booked for an overlapping period.`;
+  const allSharing = overlaps.every(b=>b.sharing);
+  if(!allSharing) return `${roomLabel(getRoom(roomId))} already has a non-sharing booking for an overlapping period.`;
+  if(overlaps.length >= SHARING_CAPACITY) return `${roomLabel(getRoom(roomId))} is already fully occupied (${SHARING_CAPACITY} sharing) for this period.`;
+  return null;
+}
+function draftConflict(roomId, startISO, endISO){
+  const lastNight = lastNightFor(startISO, endISO);
+  return draftSegments.some(seg=>{
+    if(seg.roomId!==roomId) return false;
+    const segLast = lastNightFor(seg.startDate, seg.endDate);
+    return rangesOverlap(startISO, lastNight, seg.startDate, segLast);
+  });
+}
+function findShareSibling(b){
+  if(!b || !b.sharing) return null;
+  return DB.bookings.find(x => x.id!==b.id && x.roomId===b.roomId && x.sharing && isActiveBooking(x) &&
+    rangesOverlap(b.startDate, lastOccupiedNight(b), x.startDate, lastOccupiedNight(x)));
+}
+
+/* Which active (non-cancelled) bookings of this room overlap
+   a given duration at all — used by the Gantt's duration filter to check
+   vacant/occupied. */
+function roomBookingsInRange(room, fromISO, toISO){
+  return DB.bookings.filter(b => b.roomId===room.id && isActiveBooking(b) && rangesOverlap(fromISO, toISO, b.startDate, lastOccupiedNight(b)));
+}
+
+
+/* =========================================================================
+   TOAST
+   ========================================================================= */
+function showToast(msg, tone){
+  const host = document.getElementById('toastHost');
+  const el = document.createElement('div');
+  const toneClass = tone==='error' ? 'bg-red-600' : (tone==='warn' ? 'bg-brass-600' : 'bg-mess-800');
+  el.className = 'toast-anim pointer-events-auto ' + toneClass + ' text-white text-xs font-medium px-4 py-2.5 rounded-full shadow-lg text-center max-w-[85%]';
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(),300); }, 2600);
+}
+
+/* =========================================================================
+   ROLE SHEET
+   Role and login identity are now the same thing: each role maps to a
+   specific username (USERNAME_ROLE_MAP). Switching role therefore
+   re-authenticates as that role's account, so a password is required —
+   tapping a role no longer switches instantly.
+   ========================================================================= */
+function baseRoleSheetHTML(){
+  return `
+    <div class="w-10 h-1 bg-mess-200 rounded-full mx-auto mb-3"></div>
+    <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-2 px-1">Switch role</div>
+    <div id="roleList" class="space-y-1"></div>
+    <div id="roleSheetAccount" class="mt-3 pt-3 border-t border-mess-100 flex items-center justify-between px-1"></div>
+    <button onclick="handleLogout()" class="w-full mt-2 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-semibold">Log out</button>
+  `;
+}
+function usernameForRole(role){
+  return Object.keys(USERNAME_ROLE_MAP).find(u => USERNAME_ROLE_MAP[u] === role) || null;
+}
+function openRoleSheet(){
+  document.getElementById('roleSheetContent').innerHTML = baseRoleSheetHTML();
+  const list = document.getElementById('roleList');
+  list.innerHTML = ROLES.map(r => `
+    <button onclick="promptRoleSwitch('${r}')" class="w-full text-left px-3 py-3 rounded-xl flex items-center justify-between ${r===state.role?'bg-mess-50 border border-mess-200':'hover:bg-mess-50'}">
+      <div>
+        <div class="text-sm font-medium text-mess-900">${r}</div>
+        <div class="text-[11px] text-mess-500">${ADMIN_ROLES.includes(r)?'Admin access':'Standard access'}</div>
+      </div>
+      ${r===state.role?'<span class="text-mess-700">✓</span>':''}
+    </button>
+  `).join('');
+  const accountBox = document.getElementById('roleSheetAccount');
+  accountBox.innerHTML = currentAuthUser
+    ? `<span class="text-[11px] text-mess-400">Signed in as <span class="font-medium text-mess-600">${currentAuthUser.email}</span></span>`
+    : '';
+  document.getElementById('roleSheet').classList.remove('hidden');
+}
+function closeRoleSheet(){ document.getElementById('roleSheet').classList.add('hidden'); }
+/* Replaces the role sheet's content with a password prompt for the
+   account tied to the target role. Tapping the role already active just
+   closes the sheet — no need to re-authenticate into the same account. */
+function promptRoleSwitch(targetRole){
+  if(targetRole === state.role){ closeRoleSheet(); return; }
+  const username = usernameForRole(targetRole);
+  const content = document.getElementById('roleSheetContent');
+  if(!username){
+    content.innerHTML = `
+      <div class="w-10 h-1 bg-mess-200 rounded-full mx-auto mb-3"></div>
+      <div class="text-sm text-mess-700 px-1 mb-3">No login is configured for <span class="font-semibold">${targetRole}</span> yet.</div>
+      <button onclick="openRoleSheet()" class="w-full py-2.5 rounded-xl border border-mess-200 text-mess-700 text-sm font-medium">Back</button>
+    `;
+    return;
+  }
+  content.innerHTML = `
+    <div class="w-10 h-1 bg-mess-200 rounded-full mx-auto mb-3"></div>
+    <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-1 px-1">Switch to ${targetRole}</div>
+    <div class="text-[11px] text-mess-500 mb-3 px-1">Enter the password for <span class="font-medium">${username}@omafa.in</span> to confirm.</div>
+    <div id="roleSwitchError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg px-3 py-1.5 mb-2"></div>
+    <input type="password" id="roleSwitchPassword" placeholder="Password" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter'){ event.preventDefault(); confirmRoleSwitch('${targetRole}','${username}'); }"
+      class="w-full border border-mess-200 rounded-lg px-3 py-2 text-sm mb-3">
+    <div class="flex gap-2">
+      <button type="button" onclick="openRoleSheet()" class="flex-1 py-2.5 rounded-xl border border-mess-200 text-mess-700 text-sm font-medium">Cancel</button>
+      <button type="button" id="roleSwitchSubmitBtn" onclick="confirmRoleSwitch('${targetRole}','${username}')" class="flex-1 py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold">Switch</button>
+    </div>
+  `;
+  setTimeout(()=>{ const el=document.getElementById('roleSwitchPassword'); if(el) el.focus(); }, 50);
+}
+async function confirmRoleSwitch(targetRole, username){
+  const pwdEl = document.getElementById('roleSwitchPassword');
+  const errBox = document.getElementById('roleSwitchError');
+  const pwd = pwdEl ? pwdEl.value : '';
+  errBox.classList.add('hidden');
+  if(!pwd){ errBox.textContent = 'Enter the password.'; errBox.classList.remove('hidden'); return; }
+  const btn = document.getElementById('roleSwitchSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Switching…';
+  try{
+    if(!window.firebaseLogin) throw { code: 'auth/internal-error' };
+    await window.firebaseLogin(username, pwd);
+    /* onAuthStateChangedHandler picks up the new session, sets state.role
+       accordingly, and re-renders — we just close the sheet. */
+    closeRoleSheet();
+    showToast('Role: ' + targetRole);
+  }catch(err){
+    console.warn('Role switch failed', err);
+    errBox.textContent = friendlyAuthError(err);
+    errBox.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Switch';
+  }
+}
+
+/* =========================================================================
+   NAV / CHROME
+   ========================================================================= */
+const TABS = [
+  { id:'dashboard', label:'Dashboard', icon:'&#9673;' },
+  { id:'gantt',      label:'Rooms',     icon:'&#9636;' },
+  { id:'movement',   label:'Movement',  icon:'&#8644;' },
+  { id:'requests',   label:'Requests',  icon:'&#9993;' },
+  { id:'records',    label:'Records',   icon:'&#9776;' },
+  { id:'admin',      label:'Admin',     icon:'&#9881;' },
+];
+function renderChrome(){
+  document.getElementById('roleLabel').textContent = state.role;
+  const tabs = TABS.filter(t => (t.id!=='admin' && t.id!=='requests') || isAdmin(state.role));
+
+  const nav = document.getElementById('bottomNav');
+  nav.className = `grid grid-cols-${tabs.length} text-[10px]`;
+  nav.innerHTML = tabs.map(t => {
+    const active = state.tab===t.id;
+    return `
+      <button onclick="setTab('${t.id}')" class="relative flex flex-col items-center justify-center gap-0.5 py-2.5 ${active?'tab-active':'tab-inactive'}">
+        <span class="text-lg leading-none">${t.icon}</span>
+        <span class="font-medium">${t.label}</span>
+        ${active?'<span class="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-mess-700"></span>':''}
+      </button>`;
+  }).join('');
+
+  /* Desktop/laptop sidebar (lg+) mirrors the same tab set as the bottom
+     nav — see the lg:hidden / hidden lg:flex pairing in the markup. */
+  const sidebar = document.getElementById('sidebarNav');
+  if(sidebar){
+    sidebar.innerHTML = tabs.map(t => {
+      const active = state.tab===t.id;
+      return `
+        <button onclick="setTab('${t.id}')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium mb-1 text-left ${active ? 'bg-mess-50 text-mess-800' : 'text-mess-500 hover:bg-mess-50/60 hover:text-mess-700'}">
+          <span class="text-base leading-none w-5 text-center ${active?'text-mess-700':'text-mess-400'}">${t.icon}</span>
+          <span>${t.label}</span>
+        </button>`;
+    }).join('') + `
+      <div class="mt-auto pt-3 border-t border-mess-100">
+        <button onclick="openBookingModal()" class="w-full flex items-center justify-center gap-1.5 bg-mess-700 text-white rounded-xl py-2.5 text-sm font-semibold">
+          <span class="text-base leading-none">+</span> New booking
+        </button>
+      </div>`;
+  }
+}
+/* Now that #app-content (not the page) is the real scrolling region — see
+   the fixed-height app shell in <style> — resetting scroll position on tab
+   change means resetting #app-content's own scrollTop, not window scroll. */
+function scrollContentToTop(){
+  const c = document.getElementById('app-content');
+  if(c) c.scrollTop = 0;
+}
+function setTab(id){
+  state.tab = id;
+  if(id==='gantt') resetGanttWindow();
+  render();
+  scrollContentToTop();
+}
+
+/* =========================================================================
+   MASTER RENDER
+   ========================================================================= */
+function render(){
+  /* The Gantt grid's DOM is rebuilt from scratch on every render, which
+     would silently reset horizontal scroll to 0 (start of month) on any
+     unrelated change — a filter chip, search, collapsing a block, saving
+     a booking — unless we explicitly carry the current scroll position
+     forward. Callers that WANT a specific scroll position (Prev/Next,
+     swipe-sliding, applying a date filter) set state._pendingScrollLeft
+     themselves beforehand, so we only capture here when nothing already
+     requested a specific target. We also skip this when ganttInitScrolled
+     has been deliberately reset to false (fresh tab entry, or clearing
+     filters) — that's a signal the view should re-center on today, not
+     keep wherever the old (possibly filtered/narrower) grid happened to
+     be scrolled to. */
+  if(state.tab==='gantt' && state._pendingScrollLeft===undefined && state.ganttInitScrolled){
+    const el = document.getElementById('ganttScroll');
+    if(el) state._pendingScrollLeft = el.scrollLeft;
+  }
+  renderChrome();
+  const c = document.getElementById('app-content');
+  if(state.tab==='dashboard') c.innerHTML = renderDashboard();
+  else if(state.tab==='gantt') c.innerHTML = renderGantt();
+  else if(state.tab==='movement') c.innerHTML = renderMovement();
+  else if(state.tab==='requests') c.innerHTML = renderRequests();
+  else if(state.tab==='records') c.innerHTML = renderRecords();
+  else if(state.tab==='admin') c.innerHTML = renderAdmin();
+  if(state.tab==='gantt') attachGanttScrollSync();
+}
+
+/* =========================================================================
+   DASHBOARD (with drill-down navigation)
+   ========================================================================= */
+function goToBlockGantt(blockId){
+  state.tab = 'gantt';
+  state.ganttTypeFilter = 'all';
+  state.ganttStatusFilter = '';
+  state.ganttSearch = '';
+  DB.blocks.forEach(b => { state.collapsed[b.id] = (b.id !== blockId); });
+  resetGanttWindow();
+  render(); scrollContentToTop();
+}
+/* catKey may be a Purpose-of-visit key (from the dashboard breakdown) or
+   'occupied' (from the occupancy ring) — mapped to the closest Room Type
+   filter where one exists; otherwise falls back to showing all rooms. */
+function goToCategoryGantt(catKey){
+  state.tab = 'gantt';
+  const typeMap = { TD: 'td', LivingIn: 'livingin', VIP: 'vip' };
+  state.ganttTypeFilter = typeMap[catKey] || 'all';
+  state.ganttStatusFilter = '';
+  state.ganttSearch = '';
+  state.collapsed = {};
+  resetGanttWindow();
+  render(); scrollContentToTop();
+}
+function goToMovement(filter){
+  state.tab = 'movement';
+  state.movementFilter = filter;
+  render(); scrollContentToTop();
+}
+
+function renderDashboard(){
+  const rooms = activeRooms();
+  const today = todayISO();
+  const occupiedRoomIds = new Set(DB.bookings.filter(b=>isActiveBooking(b) && isOccupiedOn(b, today)).map(b=>b.roomId));
+  const occRooms = rooms.filter(r=>occupiedRoomIds.has(r.id));
+  const total = rooms.length;
+  const occ = occRooms.length;
+  const pct = total ? Math.round((occ/total)*100) : 0;
+
+  const arrivals = DB.bookings.filter(b=>b.startDate===today && isActiveBooking(b));
+  const departures = DB.bookings.filter(b=>b.endDate===today && isActiveBooking(b));
+
+  const catCounts = {};
+  Object.keys(CATEGORY_META).forEach(k=>catCounts[k]=0);
+  DB.bookings.filter(b=>isActiveBooking(b) && isOccupiedOn(b, today)).forEach(b=>{
+    const room = getRoom(b.roomId);
+    const key = room && room.type==='vip' ? 'VIP' : b.category;
+    catCounts[key] = (catCounts[key]||0)+1;
+  });
+
+  const r = 40, circumference = 2*Math.PI*r;
+  const dashOffset = circumference - (pct/100)*circumference;
+
+  const blockRows = DB.blocks.filter(b=>b.active).map(b=>{
+    const bRooms = roomsForBlock(b.id).filter(r=>r.status!=='disabled');
+    const bOcc = bRooms.filter(r=>occupiedRoomIds.has(r.id)).length;
+    const bPct = bRooms.length ? Math.round((bOcc/bRooms.length)*100) : 0;
+    return `
+      <button onclick="goToBlockGantt('${b.id}')" class="w-full flex items-center gap-3 py-2 text-left active:opacity-60">
+        <div class="w-24 shrink-0 text-xs font-medium text-mess-700 truncate">${b.name}</div>
+        <div class="flex-1 h-2.5 rounded-full bg-mess-100 overflow-hidden">
+          <div class="h-full rounded-full ${b.vip?'bg-status-vip':'bg-mess-600'}" style="width:${bPct}%"></div>
+        </div>
+        <div class="w-12 shrink-0 text-right text-xs font-mono-num text-mess-600">${bOcc}/${bRooms.length}</div>
+        <span class="text-mess-300 text-sm shrink-0">&rsaquo;</span>
+      </button>`;
+  }).join('');
+
+  const catList = Object.entries(catCounts).map(([k,v])=>{
+    const meta = CATEGORY_META[k];
+    return `
+      <button onclick="goToCategoryGantt('${k}')" class="flex items-center gap-2 rounded-xl px-3 py-2 active:opacity-60" style="background:${meta.bg}">
+        <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${meta.color}"></span>
+        <span class="text-xs font-medium flex-1 text-left" style="color:${meta.color}">${meta.label}</span>
+        <span class="text-sm font-mono-num font-semibold" style="color:${meta.color}">${v}</span>
+      </button>`;
+  }).join('');
+
+  return `
+  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-2 space-y-4 lg:space-y-5 lg:max-w-none lg:grid lg:grid-cols-3 lg:gap-5 lg:space-y-0 lg:items-start">
+
+    <div class="bg-mess-800 rounded-2xl p-4 text-white flex items-center gap-4 lg:col-span-2">
+      <button onclick="goToCategoryGantt('occupied')" class="shrink-0">
+        <svg width="92" height="92" viewBox="0 0 100 100" class="-rotate-90">
+          <circle cx="50" cy="50" r="${r}" stroke="#294574" stroke-width="10" fill="none"/>
+          <circle cx="50" cy="50" r="${r}" stroke="#2ea1de" stroke-width="10" fill="none"
+            stroke-dasharray="${circumference}" stroke-dashoffset="${dashOffset}" stroke-linecap="round" class="ring-track"/>
+        </svg>
+      </button>
+      <div class="flex-1">
+        <div class="font-display text-3xl font-semibold leading-none">${pct}<span class="text-lg">%</span></div>
+        <div class="text-[11px] text-mess-200 mt-1 mb-2">occupancy &middot; ${occ} of ${total} rooms</div>
+        <div class="flex gap-4 text-xs">
+          <button onclick="goToMovement('arrivals')" class="text-left active:opacity-60"><span class="font-mono-num font-semibold text-brass-300">${arrivals.length}</span> arrivals today</button>
+          <button onclick="goToMovement('departures')" class="text-left active:opacity-60"><span class="font-mono-num font-semibold text-brass-300">${departures.length}</span> departures today</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-1 gap-2 lg:row-span-1">
+      <button onclick="openBookingModal()" class="bg-mess-700 text-white rounded-xl py-3 text-sm font-semibold flex items-center justify-center gap-2">
+        <span class="text-base">+</span> New booking
+      </button>
+      <button onclick="setTab('movement')" class="bg-white border border-mess-200 text-mess-800 rounded-xl py-3 text-sm font-semibold flex items-center justify-center gap-2">
+        Movement sheet
+      </button>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-mess-100 p-4 lg:col-span-2">
+      <div class="font-display uppercase text-xs font-semibold text-mess-600 tracking-wide mb-1">Block-wise occupancy</div>
+      ${blockRows}
+    </div>
+
+    <div>
+      <div class="font-display uppercase text-xs font-semibold text-mess-600 tracking-wide mb-2">Occupants by purpose of visit</div>
+      <div class="grid grid-cols-2 lg:grid-cols-2 gap-2">${catList}</div>
+    </div>
+
+  </div>`;
+}
+
+/* =========================================================================
+   GANTT MATRIX
+   ========================================================================= */
+/* Room Type filter — always visible, filters which ROOMS are shown at all
+   (based on the room's own persistent Type, not any booking). */
+/* Room Type colour palette — deliberately a different family of hues from
+   the booking Purpose-of-visit palette (CATEGORY_META) so a room's own
+   Type is never visually confused with what a particular booking is for.
+   Used both for the filter chips and as a light background tint on each
+   room's name cell in the grid and in Admin's room list. */
+const ROOM_TYPE_COLORS = {
+  td:       { bg: '#EAF2FB', text: '#2F5FB8' }, // sky blue
+  livingin: { bg: '#F5F0E8', text: '#8A6D3F' }, // warm taupe
+  vip:      { bg: '#FBEAEA', text: '#C0392B' }, // red
+};
+const ROOM_TYPE_FILTERS = ['all','td','livingin','vip'];
+function roomTypeFilterLabel(k){
+  if(k==='all') return 'All';
+  if(k==='td') return 'TD';
+  if(k==='livingin') return 'Living-in';
+  if(k==='vip') return 'VIP';
+}
+function roomTypeFilterColor(k){
+  if(k==='all') return '#122d5e';
+  return ROOM_TYPE_COLORS[k].text;
+}
+/* Occupancy status filter — only usable once a duration filter (below) is
+   set; combines with the Room Type filter above (e.g. TD + Vacant). */
+function statusFilterLabel(k){ return k==='vacant' ? 'Vacant' : 'Occupied'; }
+function statusFilterColor(k){ return k==='vacant' ? '#3F9A63' : '#125a83'; }
+function categoryKeyFor(room, booking){ return room.type==='vip' ? 'VIP' : booking.category; }
+
+/* Room search matches the room number/name itself, OR any of that room's
+   active bookings — occupant name, contact number, remarks, or category —
+   so typing a guest's name or a remark finds the right room. */
+function roomMatchesSearch(room, q){
+  if(!q) return true;
+  if(roomFullNumber(room).toLowerCase().includes(q)) return true;
+  if(room.name && room.name.toLowerCase().includes(q)) return true;
+  return DB.bookings.some(b=>{
+    if(b.roomId!==room.id || !isActiveBooking(b)) return false;
+    const catLabel = (CATEGORY_META[categoryKeyFor(room,b)]||{}).label || '';
+    return (b.guestName||'').toLowerCase().includes(q)
+      || (b.remarks||'').toLowerCase().includes(q)
+      || (b.guestPhone||'').toLowerCase().includes(q)
+      || catLabel.toLowerCase().includes(q)
+      || (b.createdBy||'').toLowerCase().includes(q);
+  });
+}
+function monthStartISO(year, monthIndex){ return toISO(new Date(year, monthIndex, 1)); }
+function monthEndISO(year, monthIndex){ return toISO(new Date(year, monthIndex+1, 0)); }
+function daysInMonth(year, monthIndex){ return new Date(year, monthIndex+1, 0).getDate(); }
+/* Adds n calendar months to an ISO date, clamping the day if the target
+   month is shorter (e.g. 31 Jan + 1 month -> 28/29 Feb, not 3 Mar). */
+function addCalendarMonths(iso, n){
+  const d = fromISO(iso);
+  const targetFirst = new Date(d.getFullYear(), d.getMonth()+n, 1);
+  const maxDay = daysInMonth(targetFirst.getFullYear(), targetFirst.getMonth());
+  return toISO(new Date(targetFirst.getFullYear(), targetFirst.getMonth(), Math.min(d.getDate(), maxDay)));
+}
+/* Shifts a period boundary by n months. If the boundary is exactly the 1st
+   or the last day of its month, it stays pinned to the 1st/last day of the
+   shifted month (so "end of Sep" shifts to "end of Oct" = the 31st, not
+   just "day 30 of Oct"). Otherwise it preserves the day-of-month. */
+function shiftBoundaryISO(iso, n){
+  const d = fromISO(iso);
+  if(d.getDate()===1) return monthStartISO(d.getFullYear(), d.getMonth()+n);
+  if(d.getDate()===daysInMonth(d.getFullYear(), d.getMonth())) return monthEndISO(d.getFullYear(), d.getMonth()+n);
+  return addCalendarMonths(iso, n);
+}
+function defaultGanttPeriod(){
+  const t = new Date();
+  return { from: monthStartISO(t.getFullYear(), t.getMonth()), to: monthEndISO(t.getFullYear(), t.getMonth()+1) };
+}
+/* Resets the scrolling window (NOT the duration filter) back to the
+   default today-centered 2-month span, and flags it to re-center on today
+   on next render. Called whenever the Rooms tab is (re-)entered, so it
+   always starts from today rather than wherever a previous swipe session
+   left off. */
+function resetGanttWindow(){
+  const def = defaultGanttPeriod();
+  state.ganttFrom = def.from;
+  state.ganttTo = def.to;
+  state.ganttInitScrolled = false;
+}
+/* While a duration filter is active, the scrollable grid shows ONLY that
+   range (nothing else), so the user is looking at exactly what they asked
+   to check. Once cleared, it falls back to the normal scrolling window. */
+function effectiveGanttRange(){
+  if(state.filterFrom && state.filterTo) return { from: state.filterFrom, to: state.filterTo };
+  return { from: state.ganttFrom, to: state.ganttTo };
+}
+function ganttDatesArr(){
+  const range = effectiveGanttRange();
+  const start = fromISO(range.from);
+  const end = fromISO(range.to);
+  const count = Math.max(1, Math.round((end-start)/86400000) + 1);
+  const arr = [];
+  for(let i=0;i<count;i++) arr.push(addDays(start,i));
+  return arr;
+}
+function toggleBlockCollapse(id){ state.collapsed[id] = !state.collapsed[id]; render(); }
+
+function renderDateRow(dates, today){
+  const hasFilter = !!(state.filterFrom && state.filterTo);
+  return `
+    <div class="flex sticky z-10 bg-white border-b border-mess-200" style="top:0px;height:${DATE_ROW_H}px;">
+      <div class="w-24 shrink-0 border-r border-mess-200 sticky left-0 bg-white" style="height:${DATE_ROW_H}px;"></div>
+      ${dates.map(d=>{
+        const iso = toISO(d); const isToday = iso===today;
+        const inFilter = hasFilter && iso>=state.filterFrom && iso<=state.filterTo;
+        const bg = isToday ? 'bg-brass-50' : (inFilter ? 'bg-mess-100' : '');
+        return `<div class="gantt-cell w-10 shrink-0 flex flex-col items-center justify-center ${bg}" style="height:${DATE_ROW_H}px;">
+          <div class="text-[8px] text-mess-400 uppercase leading-none">${d.toLocaleDateString('en-GB',{month:'short'})}</div>
+          <div class="text-[9px] text-mess-400 uppercase leading-none mt-0.5">${fmtWeekday(d)}</div>
+          <div class="text-xs font-mono-num font-semibold leading-none mt-0.5 ${isToday?'text-brass-700':'text-mess-800'}">${d.getDate()}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function renderGantt(){
+  const dates = ganttDatesArr();
+  const today = todayISO();
+  const searchQ = state.ganttSearch.trim().toLowerCase();
+  const hasDurationFilter = !!(state.filterFrom && state.filterTo);
+
+  const blockSections = DB.blocks.filter(b=>b.active).sort((a,b)=>a.order-b.order).map(block=>{
+    let rooms = roomsForBlock(block.id);
+    if(searchQ) rooms = rooms.filter(r => roomMatchesSearch(r, searchQ));
+    if(state.ganttTypeFilter!=='all'){
+      rooms = rooms.filter(r => r.type===state.ganttTypeFilter);
+    }
+    if(hasDurationFilter && state.ganttStatusFilter){
+      rooms = rooms.filter(r=>{
+        const inRangeBookings = roomBookingsInRange(r, state.filterFrom, state.filterTo);
+        if(state.ganttStatusFilter==='vacant') return inRangeBookings.length===0;
+        return inRangeBookings.length>0; // 'occupied'
+      });
+    }
+    if(rooms.length===0) return '';
+    const collapsed = !!state.collapsed[block.id];
+    const occToday = rooms.filter(r=>bookingOnDate(r.id, today)).length;
+
+    const rows = collapsed ? '' : rooms.map(room=>{
+      const cells = dates.map(d=>{
+        const iso = toISO(d);
+        const bks = bookingsOnDate(room.id, iso);
+
+        if(bks.length===0){
+          return `<button onclick="onGanttCellClick('${room.id}','${iso}')"
+            class="gantt-cell w-10 h-9 shrink-0 border-r border-b border-mess-100 hover:bg-mess-50 ${iso===today?'bg-brass-50/40':''}"></button>`;
+        }
+        if(bks.length===1){
+          const b = bks[0];
+          const meta = CATEGORY_META[categoryKeyFor(room, b)];
+          const isStart = iso===b.startDate;
+          const isEnd = iso===lastOccupiedNight(b);
+          return `<button onclick="onGanttCellClick('${room.id}','${iso}')"
+              class="gantt-cell w-10 h-9 shrink-0 border-r border-b border-mess-100 flex items-center justify-center relative"
+              title="${b.guestName}${b.stayGroupId?' (multi-room stay)':''}">
+            <span class="absolute inset-y-1 ${isStart?'left-0.5 rounded-l':'left-0'} ${isEnd?'right-0.5 rounded-r':'right-0'}"
+              style="background:${meta.color}; opacity:0.9"></span>
+          </button>`;
+        }
+        const [b1,b2] = bks;
+        const m1 = CATEGORY_META[categoryKeyFor(room,b1)];
+        const m2 = CATEGORY_META[categoryKeyFor(room,b2)];
+        return `<button onclick="onGanttCellClick('${room.id}','${iso}')"
+            class="gantt-cell w-10 h-9 shrink-0 border-r border-b border-mess-100 relative flex flex-col overflow-hidden"
+            title="${b1.guestName} & ${b2.guestName} (sharing)">
+          <span class="flex-1" style="background:${m1.color}; opacity:0.85"></span>
+          <span class="flex-1 border-t border-white/60" style="background:${m2.color}; opacity:0.85"></span>
+        </button>`;
+      }).join('');
+      const typeColor = ROOM_TYPE_COLORS[room.type];
+      return `
+        <div class="flex items-stretch">
+          <div class="gantt-name-col w-24 shrink-0 border-r border-b border-mess-100 flex items-center px-2"
+               style="background:${typeColor.bg}; border-left:3px solid ${typeColor.text};">
+            <div class="truncate">
+              <div class="text-xs font-semibold text-mess-800 truncate">${room.type==='vip'?room.name:roomFullNumber(room)}</div>
+              ${room.type==='vip' ? `<div class="text-[9px] text-mess-400">${roomFullNumber(room)}</div>`:''}
+            </div>
+          </div>
+          ${cells}
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="${collapsed?'':'accordion-open'}">
+        <div class="sticky z-[9] bg-mess-100 border-b border-mess-200" style="top:${DATE_ROW_H}px;height:34px;width:${96+dates.length*CELL_W}px;">
+          <button onclick="toggleBlockCollapse('${block.id}')" class="sticky flex items-center gap-2 h-full px-3" style="left:0px;">
+            <span class="chev inline-block transition-transform text-mess-600 text-xs">&#9656;</span>
+            <span class="font-display uppercase text-xs font-semibold text-mess-800 tracking-wide whitespace-nowrap">${block.name}</span>
+            <span class="text-[10px] text-mess-500 font-mono-num whitespace-nowrap">${occToday}/${rooms.length} occupied today</span>
+          </button>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('');
+
+  return `
+  <div class="flex flex-col h-full">
+  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-2 shrink-0">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="relative flex-1 min-w-0">
+        <input type="text" oninput="onGanttSearch(this.value)" value="${state.ganttSearch}" placeholder="Search room, name, remarks, contact..."
+          class="w-full border border-mess-200 rounded-lg pl-3 ${state.ganttSearch?'pr-8':'pr-3'} py-2 text-sm bg-white">
+        ${state.ganttSearch ? `<button type="button" onclick="clearGanttSearch()" aria-label="Clear search" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-mess-100 text-mess-500 flex items-center justify-center text-xs leading-none">✕</button>` : ''}
+      </div>
+      <button onclick="openBookingModal()" class="bg-mess-700 text-white rounded-lg px-3 h-[38px] text-sm font-semibold shrink-0">+ New</button>
+    </div>
+
+    <div class="flex items-center gap-1.5 mb-2">
+      <span class="text-[11px] text-mess-500 shrink-0">Filter dates:</span>
+      <input type="date" id="ganttFromInput" value="${state.filterFrom}" onchange="applyGanttDateFilter()" class="flex-1 min-w-0 border border-mess-200 rounded-lg px-1.5 py-1.5 text-[11px] bg-white">
+      <span class="text-mess-400 text-[10px] shrink-0">to</span>
+      <input type="date" id="ganttToInput" value="${state.filterTo}" onchange="applyGanttDateFilter()" class="flex-1 min-w-0 border border-mess-200 rounded-lg px-1.5 py-1.5 text-[11px] bg-white">
+      <button type="button" onclick="clearGanttFilters()" aria-label="Clear filters" title="Clear filters" class="w-8 h-8 shrink-0 rounded-lg bg-mess-50 border border-mess-200 text-mess-500 flex items-center justify-center text-xs">✕</button>
+    </div>
+
+    <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-2">
+      ${ROOM_TYPE_FILTERS.map(k=>{
+        const active = state.ganttTypeFilter===k;
+        const color = roomTypeFilterColor(k);
+        return `<button onclick="setGanttTypeFilter('${k}')" class="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border"
+          style="${active?`background:${color};color:white;border-color:${color}`:`color:${color};border-color:${color}55;background:white`}">${roomTypeFilterLabel(k)}</button>`;
+      }).join('')}
+      ${hasDurationFilter ? `
+        <span class="w-px h-5 bg-mess-200 self-center shrink-0"></span>
+        ${['vacant','occupied'].map(k=>{
+          const active = state.ganttStatusFilter===k;
+          const color = statusFilterColor(k);
+          return `<button onclick="setGanttStatusFilter('${k}')" class="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border"
+            style="${active?`background:${color};color:white;border-color:${color}`:`color:${color};border-color:${color}55;background:white`}">${statusFilterLabel(k)}</button>`;
+        }).join('')}
+      ` : ''}
+    </div>
+  </div>
+  <div id="ganttScroll" class="flex-1 min-h-0 overflow-auto border-t border-mess-200 bg-white mx-0">
+    <div style="width:${96+dates.length*CELL_W}px">
+      ${renderDateRow(dates, today)}
+      ${blockSections || '<div class="p-6 text-center text-sm text-mess-400">No rooms match your search.</div>'}
+    </div>
+  </div>
+  </div>`;
+}
+function onGanttSearch(v){ state.ganttSearch = v; render(); const el=document.querySelector('#app-content input[type=text]'); if(el){ el.focus(); el.selectionStart = el.selectionEnd = el.value.length; } }
+function clearGanttSearch(){ state.ganttSearch = ''; render(); }
+/* TD/Living-in/VIP toggle like Vacant/Occupied: tapping the active one
+   deselects it back to "all"; "all" itself is a plain reset, not a toggle. */
+function setGanttTypeFilter(k){
+  state.ganttTypeFilter = (k==='all') ? 'all' : (state.ganttTypeFilter===k ? 'all' : k);
+  render();
+}
+function setGanttStatusFilter(k){ state.ganttStatusFilter = (state.ganttStatusFilter===k) ? '' : k; render(); }
+
+function onGanttCellClick(roomId, dateISO){
+  const bks = bookingsOnDate(roomId, dateISO);
+  if(bks.length===0) return openBookingModal(roomId, dateISO);
+  if(bks.length===1) return openDetailModal(bks[0].id);
+  openSharedCellChooser(bks);
+}
+function openSharedCellChooser(bks){
+  const body = document.getElementById('detailModalBody');
+  body.innerHTML = `
+    <div class="w-10 h-1 bg-mess-200 rounded-full mx-auto mb-3"></div>
+    <div class="font-display uppercase text-xs font-semibold text-mess-600 mb-2">Room shared by ${bks.length} occupants</div>
+    <div class="space-y-2">
+    ${bks.map(b=>{
+      const room=getRoom(b.roomId); const meta=CATEGORY_META[categoryKeyFor(room,b)];
+      return `<button onclick="openDetailModal('${b.id}')" class="w-full text-left flex items-center gap-2 bg-mess-50 rounded-lg px-3 py-2">
+        <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${meta.color}"></span>
+        <div class="flex-1 min-w-0"><div class="text-xs font-semibold text-mess-800 truncate">${b.guestName}</div><div class="text-[11px] text-mess-500">${fmtShort(b.startDate)} – ${fmtEndDateShort(b.endDate)}</div></div>
+      </button>`;
+    }).join('')}
+    </div>
+    <button onclick="closeDetailModal()" class="w-full mt-3 py-2.5 rounded-xl border border-mess-200 text-mess-700 text-xs font-semibold">Close</button>
+  `;
+  document.getElementById('detailModal').classList.remove('hidden');
+}
+
+/* Duration filter — when both dates are set, the scrollable grid itself is
+   narrowed to show ONLY that range (see effectiveGanttRange), and the
+   Vacant/Occupied chips become available, combining with the Room Type
+   filter. Clearing it restores the normal scrolling window, re-centered
+   on today exactly as when the Rooms tab is first opened. */
+function applyGanttDateFilter(){
+  const from = document.getElementById('ganttFromInput').value;
+  const to = document.getElementById('ganttToInput').value;
+  if(from && to && to < from){ showToast('Enter a valid date range', 'error'); return; }
+  state.filterFrom = from || '';
+  state.filterTo = to || '';
+
+  if(from && to){
+    /* Both ends set — the full duration filter applies: the grid narrows
+       to exactly this range (see effectiveGanttRange), starting from it. */
+    state._pendingScrollLeft = 0;
+    render();
+    return;
+  }
+
+  if(from){
+    /* Only "From" picked so far — the filter isn't complete yet (grid
+       stays at its normal width), but jump the view to start showing
+       that date, extending/repositioning the scrolling window to
+       include it if it isn't currently loaded. */
+    if(from < state.ganttFrom || from > state.ganttTo){
+      const d = fromISO(from);
+      state.ganttFrom = monthStartISO(d.getFullYear(), d.getMonth());
+      state.ganttTo = monthEndISO(d.getFullYear(), d.getMonth()+1);
+    }
+    const idx = daysBetween(state.ganttFrom, from);
+    state._pendingScrollLeft = Math.max(0, idx*CELL_W);
+    render();
+    return;
+  }
+
+  render();
+}
+function clearGanttFilters(){
+  state.filterFrom = '';
+  state.filterTo = '';
+  state.ganttStatusFilter = '';
+  resetGanttWindow();
+  render();
+}
+/* Swiping/scrolling near an edge slides the whole period by one month in
+   that direction, keeping the currently-visible dates in place (so it
+   feels continuous) rather than jumping. */
+function slideGanttPeriod(deltaMonths, el){
+  const oldFrom = state.ganttFrom;
+  const newFrom = shiftBoundaryISO(state.ganttFrom, deltaMonths);
+  const newTo = shiftBoundaryISO(state.ganttTo, deltaMonths);
+  const shiftDays = daysBetween(oldFrom, newFrom);
+  state.ganttFrom = newFrom;
+  state.ganttTo = newTo;
+  state._pendingScrollLeft = Math.max(0, el.scrollLeft - shiftDays*CELL_W);
+  render();
+}
+
+function attachGanttScrollSync(){
+  const el = document.getElementById('ganttScroll');
+  if(!el) return;
+  const filtered = !!(state.filterFrom && state.filterTo);
+  if(state._pendingScrollLeft !== undefined){
+    const pending = state._pendingScrollLeft;
+    state._pendingScrollLeft = undefined;
+    requestAnimationFrame(()=>{ el.scrollLeft = pending; });
+  } else if(!filtered && !state.ganttInitScrolled){
+    state.ganttInitScrolled = true;
+    const today = todayISO();
+    let target = 0;
+    if(today >= state.ganttFrom && today <= state.ganttTo){
+      const idx = daysBetween(state.ganttFrom, today);
+      target = Math.max(0, (idx-2)*CELL_W);
+    }
+    if(target > 0){
+      requestAnimationFrame(()=>{ el.scrollLeft = target; });
+    }
+  }
+  /* While a duration filter is active the grid is locked to exactly that
+     range — no edge-triggered month sliding (native scroll still works
+     within it if it's wider than the screen). */
+  if(filtered) return;
+  let sliding = false;
+  const threshold = 320;
+  el.addEventListener('scroll', () => {
+    if(sliding) return;
+    const nearRight = el.scrollLeft + el.clientWidth > el.scrollWidth - threshold;
+    const nearLeft = el.scrollLeft < threshold;
+    if(nearRight){
+      sliding = true;
+      slideGanttPeriod(1, el);
+      requestAnimationFrame(()=>{ sliding = false; });
+    } else if(nearLeft){
+      sliding = true;
+      slideGanttPeriod(-1, el);
+      requestAnimationFrame(()=>{ sliding = false; });
+    }
+  }, { passive: true });
+}
+
+/* =========================================================================
+   BOOKING MODAL — new (with optional multi-room continuous stay + second
+   occupant), edit, and add-a-room-period-to-an-existing-stay.
+   ========================================================================= */
+function setGuestFieldsDisabled(disabled){
+  ['f_guestName','f_guestPhone'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.disabled = disabled;
+    el.classList.toggle('bg-mess-50', disabled);
+    el.classList.toggle('text-mess-400', disabled);
+  });
+}
+
+function openBookingModal(roomId, dateISO, editId, inheritFrom){
+  const form = document.getElementById('bookingForm');
+  form.reset();
+  document.getElementById('bookingFormError').classList.add('hidden');
+  document.getElementById('stayBanner').classList.add('hidden');
+  setGuestFieldsDisabled(false);
+  draftSegments = [];
+  renderSegmentList();
+
+  document.getElementById('f_sharing').checked = false;
+  document.getElementById('occupant2Wrap').classList.add('hidden');
+  document.getElementById('f_guestName2').value = '';
+  document.getElementById('f_guestPhone2').value = '';
+  document.getElementById('addPeriodBtn').classList.add('hidden');
+  // form.reset() restores values but not JS-set `disabled` state, so an
+  // open-ended booking left over from a previous edit could otherwise
+  // leave these fields stuck disabled on the next open.
+  document.getElementById('f_openEnded').checked = false;
+  document.getElementById('f_endDate').disabled = false;
+  document.getElementById('f_endTime').disabled = false;
+  document.getElementById('f_openEndedWrap').classList.add('hidden');
+
+  const editingBooking = editId ? DB.bookings.find(b=>b.id===editId) : null;
+
+  if(editingBooking){
+    if(inheritFrom && !inheritFrom.endDate){
+      showToast('This stay has no checkout date yet — set one before adding another room period.', 'error');
+      return;
+    }
+    form.dataset.mode = 'edit';
+    form.dataset.editingId = editId;
+    form.dataset.stayGroupId = '';
+    form.dataset.occupant2Id = '';
+    document.getElementById('bookingModalTitle').textContent = 'Edit booking';
+    document.getElementById('bookingSubmitBtn').textContent = 'Save changes';
+    document.getElementById('f_guestName').value = editingBooking.guestName;
+    document.getElementById('f_guestPhone').value = stripCountryCode(editingBooking.guestPhone);
+    document.getElementById('f_category').value = editingBooking.category;
+    document.getElementById('f_remarks').value = editingBooking.remarks || '';
+    document.getElementById('f_startDate').value = editingBooking.startDate;
+    document.getElementById('f_endDate').value = editingBooking.endDate || '';
+    document.getElementById('f_startTime').value = editingBooking.startTime || DEFAULT_CHECKIN_TIME;
+    document.getElementById('f_endTime').value = editingBooking.endTime || DEFAULT_CHECKOUT_TIME;
+    document.getElementById('f_sharing').checked = !!editingBooking.sharing;
+    document.getElementById('occupant2Wrap').classList.toggle('hidden', !editingBooking.sharing);
+    onCategoryChange(); // reveals the open-ended checkbox if this is Living-in
+    if(editingBooking.category==='LivingIn' && !editingBooking.endDate){
+      document.getElementById('f_openEnded').checked = true;
+      document.getElementById('f_endDate').disabled = true;
+      document.getElementById('f_endTime').disabled = true;
+    }
+
+    if(editingBooking.stayGroupId){
+      const banner = document.getElementById('stayBanner');
+      banner.textContent = 'This room period is part of a multi-room stay. Guest name / phone changes apply to every period.';
+      banner.classList.remove('hidden');
+    }
+    const sibling = findShareSibling(editingBooking);
+    form.dataset.occupant2Id = sibling ? sibling.id : '';
+    if(sibling){
+      document.getElementById('f_guestName2').value = sibling.guestName;
+      document.getElementById('f_guestPhone2').value = stripCountryCode(sibling.guestPhone);
+      document.getElementById('f_startDate2').value = sibling.startDate;
+      document.getElementById('f_endDate2').value = sibling.endDate;
+      document.getElementById('f_startTime2').value = sibling.startTime || DEFAULT_CHECKIN_TIME;
+      document.getElementById('f_endTime2').value = sibling.endTime || DEFAULT_CHECKOUT_TIME;
+    } else if(editingBooking.sharing){
+      document.getElementById('f_startDate2').value = editingBooking.startDate;
+      document.getElementById('f_endDate2').value = editingBooking.endDate;
+      document.getElementById('f_startTime2').value = DEFAULT_CHECKIN_TIME;
+      document.getElementById('f_endTime2').value = DEFAULT_CHECKOUT_TIME;
+    }
+    refreshRoomOptions(editingBooking.roomId);
+
+  } else if(inheritFrom){
+    if(!inheritFrom.endDate){
+      showToast('This stay has no checkout date yet — set one before adding another room period.', 'error');
+      return;
+    }
+    form.dataset.mode = 'inherit';
+    form.dataset.editingId = '';
+    form.dataset.stayGroupId = inheritFrom.stayGroupId;
+    form.dataset.occupant2Id = '';
+    document.getElementById('bookingModalTitle').textContent = 'Add room period to stay';
+    document.getElementById('bookingSubmitBtn').textContent = 'Add room period';
+    document.getElementById('f_guestName').value = inheritFrom.guestName;
+    document.getElementById('f_guestPhone').value = stripCountryCode(inheritFrom.guestPhone);
+    document.getElementById('f_category').value = inheritFrom.category;
+    document.getElementById('f_remarks').value = inheritFrom.remarks || '';
+    document.getElementById('f_sharing').checked = !!inheritFrom.sharing;
+    document.getElementById('occupant2Wrap').classList.toggle('hidden', !inheritFrom.sharing);
+    onCategoryChange();
+    const start = inheritFrom.endDate;
+    document.getElementById('f_startDate').value = start;
+    document.getElementById('f_endDate').value = toISO(addDays(fromISO(start),1));
+    document.getElementById('f_startTime').value = inheritFrom.endTime || DEFAULT_CHECKOUT_TIME;
+    document.getElementById('f_endTime').value = DEFAULT_CHECKOUT_TIME;
+    if(inheritFrom.sharing){
+      document.getElementById('f_startDate2').value = start;
+      document.getElementById('f_endDate2').value = toISO(addDays(fromISO(start),1));
+      document.getElementById('f_startTime2').value = DEFAULT_CHECKIN_TIME;
+      document.getElementById('f_endTime2').value = DEFAULT_CHECKOUT_TIME;
+    }
+    setGuestFieldsDisabled(true);
+    const banner = document.getElementById('stayBanner');
+    banner.textContent = `Continuing the stay for ${inheritFrom.guestName} — starts automatically on ${fmtShort(start)} (the previous check-out date), with no gap or overlap. Pick the new room below.`;
+    banner.classList.remove('hidden');
+    refreshRoomOptions(null);
+
+  } else {
+    form.dataset.mode = 'new';
+    form.dataset.editingId = '';
+    form.dataset.stayGroupId = '';
+    form.dataset.occupant2Id = '';
+    document.getElementById('bookingModalTitle').textContent = 'New booking';
+    document.getElementById('bookingSubmitBtn').textContent = 'Save booking';
+    document.getElementById('addPeriodBtn').classList.remove('hidden');
+    const start = dateISO || todayISO();
+    document.getElementById('f_startDate').value = start;
+    document.getElementById('f_endDate').value = toISO(addDays(fromISO(start),1));
+    document.getElementById('f_startTime').value = DEFAULT_CHECKIN_TIME;
+    document.getElementById('f_endTime').value = DEFAULT_CHECKOUT_TIME;
+    onCategoryChange();
+    refreshRoomOptions(roomId);
+  }
+
+  document.getElementById('bookingModal').classList.remove('hidden');
+}
+function closeBookingModal(){ document.getElementById('bookingModal').classList.add('hidden'); }
+
+/* Living-in is the one purpose where a room can be allotted without yet
+   knowing the checkout date (occupant stays until posted out) — the
+   checkbox only ever appears for that category, and switching away from
+   Living-in with it checked forces a real departure date back on, since
+   no other purpose makes sense left open-ended. */
+function onCategoryChange(){
+  const isLivingIn = document.getElementById('f_category').value === 'LivingIn';
+  const wrap = document.getElementById('f_openEndedWrap');
+  wrap.classList.toggle('hidden', !isLivingIn);
+  if(!isLivingIn && document.getElementById('f_openEnded').checked){
+    document.getElementById('f_openEnded').checked = false;
+    onOpenEndedToggle();
+  }
+}
+function onOpenEndedToggle(){
+  const openEnded = document.getElementById('f_openEnded').checked;
+  const endDateEl = document.getElementById('f_endDate');
+  const endTimeEl = document.getElementById('f_endTime');
+  endDateEl.disabled = openEnded;
+  endTimeEl.disabled = openEnded;
+  if(openEnded){ endDateEl.value = ''; endTimeEl.value = ''; }
+  refreshRoomOptions(document.getElementById('f_roomId').value);
+}
+
+function onSharingToggle(){
+  const checked = document.getElementById('f_sharing').checked;
+  document.getElementById('occupant2Wrap').classList.toggle('hidden', !checked);
+  if(checked){
+    const s2 = document.getElementById('f_startDate2');
+    const e2 = document.getElementById('f_endDate2');
+    const st2 = document.getElementById('f_startTime2');
+    const et2 = document.getElementById('f_endTime2');
+    if(!s2.value) s2.value = document.getElementById('f_startDate').value;
+    if(!e2.value) e2.value = document.getElementById('f_endDate').value;
+    if(!st2.value) st2.value = document.getElementById('f_startTime').value || DEFAULT_CHECKIN_TIME;
+    if(!et2.value) et2.value = document.getElementById('f_endTime').value || DEFAULT_CHECKOUT_TIME;
+  }
+  refreshRoomOptions(document.getElementById('f_roomId').value);
+}
+
+function refreshRoomOptions(preselectRoomId){
+  const roomSel = document.getElementById('f_roomId');
+  const start = document.getElementById('f_startDate').value;
+  const openEnded = document.getElementById('f_openEnded') && document.getElementById('f_openEnded').checked;
+  const end = openEnded ? '' : document.getElementById('f_endDate').value;
+  const sharing = document.getElementById('f_sharing').checked;
+  const editingId = document.getElementById('bookingForm').dataset.editingId || null;
+
+  if(!start || (!openEnded && (!end || end < start))){
+    roomSel.innerHTML = `<option value="">Set valid arrival &amp; departure dates first</option>`;
+    return;
+  }
+  const groups = DB.blocks.filter(b=>b.active).map(block=>{
+    const rooms = roomsForBlock(block.id).filter(r=>r.status==='available').filter(r=>{
+      if(conflictCheck(r.id, start, end, editingId, sharing)) return false;
+      if(draftSegments.length && draftConflict(r.id, start, end)) return false;
+      return true;
+    });
+    return { block, rooms };
+  }).filter(g=>g.rooms.length>0);
+
+  if(groups.length===0){
+    roomSel.innerHTML = `<option value="">No rooms available for these dates</option>`;
+    return;
+  }
+  roomSel.innerHTML = groups.map(g=>`<optgroup label="${g.block.name}">${g.rooms.map(r=>`<option value="${r.id}">${roomLabel(r)}</option>`).join('')}</optgroup>`).join('');
+  if(preselectRoomId && groups.some(g=>g.rooms.some(r=>r.id===preselectRoomId))){
+    roomSel.value = preselectRoomId;
+  }
+}
+
+/* --- Multi-room continuous-stay staging (new-booking mode only) --- */
+function renderSegmentList(){
+  const wrap = document.getElementById('segmentList');
+  if(draftSegments.length===0){ wrap.classList.add('hidden'); wrap.innerHTML=''; return; }
+  wrap.classList.remove('hidden');
+  wrap.innerHTML = `<div class="text-xs font-semibold text-mess-700 mb-1.5">Room periods added to this stay</div>` +
+    draftSegments.map((s,i)=>{
+      const room = getRoom(s.roomId);
+      return `<div class="flex items-center gap-2 bg-mess-50 border border-mess-100 rounded-lg px-3 py-2 mb-1.5">
+        <span class="text-[10px] font-mono-num text-mess-400 shrink-0">${i+1}</span>
+        <div class="flex-1 text-xs text-mess-700">${roomLabel(room)} &middot; ${fmtShort(s.startDate)} ${formatTimeShort(s.startTime, DEFAULT_CHECKIN_TIME)} – ${fmtShort(s.endDate)} ${formatTimeShort(s.endTime, DEFAULT_CHECKOUT_TIME)}</div>
+        <button type="button" onclick="removeDraftSegment(${i})" class="text-[10px] font-semibold text-red-600 shrink-0">Remove</button>
+      </div>`;
+    }).join('') +
+    `<div class="text-[10px] text-mess-400 px-0.5 mb-1">The room &amp; dates below continue as the next period, with no gap.</div>`;
+}
+function removeDraftSegment(idx){
+  draftSegments.splice(idx,1);
+  renderSegmentList();
+  refreshRoomOptions(document.getElementById('f_roomId').value);
+}
+function addAnotherPeriod(){
+  const roomId = document.getElementById('f_roomId').value;
+  if(!roomId){ showToast('Select a room first', 'error'); return; }
+  if(document.getElementById('f_openEnded').checked){
+    showToast('This period has no checkout date yet — set one before adding another room period.', 'error');
+    return;
+  }
+  const start = document.getElementById('f_startDate').value;
+  const end = document.getElementById('f_endDate').value;
+  if(end < start){ showToast('Departure cannot be before arrival', 'error'); return; }
+  const sharing = document.getElementById('f_sharing').checked;
+  const msg = conflictCheck(roomId, start, end, null, sharing) || (draftConflict(roomId, start, end) ? 'This period overlaps one already added to this stay.' : null);
+  if(msg){ showToast(msg, 'error'); return; }
+
+  const startTime = timeOrDefault(document.getElementById('f_startTime').value, DEFAULT_CHECKIN_TIME);
+  const endTime = timeOrDefault(document.getElementById('f_endTime').value, DEFAULT_CHECKOUT_TIME);
+
+  draftSegments.push({ roomId, startDate: start, endDate: end, startTime, endTime });
+  renderSegmentList();
+  // continuity: next leg starts exactly where this one ends — no gap, no overlap
+  document.getElementById('f_startDate').value = end;
+  document.getElementById('f_endDate').value = toISO(addDays(fromISO(end),1));
+  document.getElementById('f_startTime').value = endTime;
+  document.getElementById('f_endTime').value = DEFAULT_CHECKOUT_TIME;
+  refreshRoomOptions(null);
+  showToast('Room period added — choose the next room, or save the stay.');
+}
+
+/* Creates one booking per segment for a single guest, linked by a shared
+   stayGroupId when there is more than one segment. Returns the stayGroupId. */
+function createStayBookings(segments, guestName, guestPhone, category, sharing, remarks){
+  const stayGroupId = segments.length>1 ? uid('stay') : null;
+  segments.forEach(seg=>{
+    const room = getRoom(seg.roomId);
+    const booking = {
+      id: uid('bk'), roomId: seg.roomId, roomTypeAtBooking: room.type,
+      guestName, category, startDate: seg.startDate, endDate: seg.endDate,
+      startTime: seg.startTime || DEFAULT_CHECKIN_TIME,
+      endTime: seg.endDate ? (seg.endTime || DEFAULT_CHECKOUT_TIME) : null,
+      guestPhone, sharing, remarks: remarks || '',
+      stayGroupId, status: 'confirmed',
+      checkedIn:false, checkedOut:false, createdBy: state.role, createdAt: new Date().toISOString(),
+    };
+    DB.bookings.push(booking);
+    persistBooking(booking);
+  });
+  return stayGroupId;
+}
+
+/* Creates / updates / removes the second occupant's booking for a single
+   room-period (used in edit & inherit modes, where staging isn't used). */
+/* The second occupant always shares the SAME room as the primary occupant,
+   but may have their own arrival/departure dates — same duration or a
+   different overlapping one. Reads f_startDate2 / f_endDate2 directly so
+   it is independent of whatever dates the primary occupant ends up with. */
+function syncSecondOccupant(roomId, category, sharingChecked){
+  const form = document.getElementById('bookingForm');
+  const existingId = form.dataset.occupant2Id || null;
+  const name2 = document.getElementById('f_guestName2').value.trim();
+
+  if(!sharingChecked || !name2){
+    if(existingId){
+      const sib = DB.bookings.find(x=>x.id===existingId);
+      if(sib){ sib.status = 'cancelled'; persistBooking(sib); }
+      logAudit('booking_cancelled', 'Second occupant removed from shared room');
+    }
+    return;
+  }
+  const start2 = document.getElementById('f_startDate2').value;
+  const end2 = document.getElementById('f_endDate2').value;
+  if(!start2 || !end2 || end2 < start2){
+    showToast('Second occupant dates are invalid — not saved.', 'warn');
+    return;
+  }
+  const phone2Check = normalizePhone(document.getElementById('f_guestPhone2').value);
+  const phone2 = phone2Check.ok ? phone2Check.value : '';
+  const guestName2 = name2;
+  const startTime2 = timeOrDefault(document.getElementById('f_startTime2').value, DEFAULT_CHECKIN_TIME);
+  const endTime2 = timeOrDefault(document.getElementById('f_endTime2').value, DEFAULT_CHECKOUT_TIME);
+
+  if(existingId){
+    const sib = DB.bookings.find(x=>x.id===existingId);
+    if(sib){
+      const msg = conflictCheck(roomId, start2, end2, sib.id, true);
+      if(msg){ showToast('Second occupant not updated — ' + msg, 'warn'); return; }
+      Object.assign(sib, { roomId, category, startDate: start2, endDate: end2, startTime: startTime2, endTime: endTime2, guestPhone: phone2, guestName: guestName2, sharing: true });
+      persistBooking(sib);
+      logAudit('booking_edited', `${guestName2} (sharing partner) updated`);
+      return;
+    }
+  }
+  const msg = conflictCheck(roomId, start2, end2, null, true);
+  if(msg){ showToast('Second occupant not added — ' + msg, 'warn'); return; }
+  const room = getRoom(roomId);
+  const sibBooking = {
+    id: uid('bk'), roomId, roomTypeAtBooking: room.type, guestName: guestName2, category,
+    startDate: start2, endDate: end2, startTime: startTime2, endTime: endTime2, guestPhone: phone2, sharing: true, remarks: '', stayGroupId: null,
+    status: 'confirmed',
+    checkedIn:false, checkedOut:false, createdBy: state.role, createdAt: new Date().toISOString(),
+  };
+  DB.bookings.push(sibBooking);
+  persistBooking(sibBooking);
+  logAudit('booking_created', `${guestName2} → ${roomLabel(room)} (${start2} to ${end2}) [sharing partner]`);
+}
+
+function saveBooking(ev){
+  ev.preventDefault();
+  const form = document.getElementById('bookingForm');
+  const mode = form.dataset.mode;
+  const errBox = document.getElementById('bookingFormError');
+  errBox.classList.add('hidden');
+
+  const roomId = document.getElementById('f_roomId').value;
+  if(!roomId){ errBox.textContent = 'Select an available room.'; errBox.classList.remove('hidden'); return; }
+  const room = getRoom(roomId);
+  const startDate = document.getElementById('f_startDate').value;
+  const openEnded = document.getElementById('f_openEnded').checked;
+  const endDate = openEnded ? null : document.getElementById('f_endDate').value;
+  const sharing = document.getElementById('f_sharing').checked;
+  const category = document.getElementById('f_category').value;
+  const guestName = document.getElementById('f_guestName').value.trim();
+  const remarks = document.getElementById('f_remarks').value.trim();
+  const startTime = timeOrDefault(document.getElementById('f_startTime').value, DEFAULT_CHECKIN_TIME);
+  const endTime = openEnded ? null : timeOrDefault(document.getElementById('f_endTime').value, DEFAULT_CHECKOUT_TIME);
+
+  const phoneCheck = normalizePhone(document.getElementById('f_guestPhone').value);
+  if(!phoneCheck.ok){
+    errBox.textContent = 'Contact number is invalid — enter a valid 10-digit mobile number, or leave it blank.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+  const guestPhone = phoneCheck.value;
+
+  const name2 = document.getElementById('f_guestName2').value.trim();
+  if(sharing && name2){
+    const phone2Check = normalizePhone(document.getElementById('f_guestPhone2').value);
+    if(!phone2Check.ok){
+      errBox.textContent = 'Second occupant contact number is invalid — enter a valid 10-digit mobile number, or leave it blank.';
+      errBox.classList.remove('hidden');
+      return;
+    }
+  }
+
+  if(!openEnded && endDate < startDate){
+    errBox.textContent = 'Departure (check-out) date cannot be before arrival date.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  if(mode==='edit'){
+    const editingId = form.dataset.editingId;
+    const conflictMsg = conflictCheck(roomId, startDate, endDate, editingId, sharing);
+    if(conflictMsg){ errBox.textContent = conflictMsg; errBox.classList.remove('hidden'); return; }
+    const b = DB.bookings.find(x=>x.id===editingId);
+    const wasCancelled = b.status === 'cancelled';
+    Object.assign(b, { roomId, roomTypeAtBooking: room.type, guestName, category, startDate, endDate, startTime, endTime, guestPhone, sharing, remarks });
+    if(wasCancelled) b.status = 'confirmed';
+    persistBooking(b);
+    if(b.stayGroupId){
+      DB.bookings.filter(x=>x.stayGroupId===b.stayGroupId && x.id!==b.id).forEach(sib=>{
+        sib.guestName = guestName; sib.guestPhone = guestPhone;
+        persistBooking(sib);
+      });
+    }
+    syncSecondOccupant(roomId, category, sharing);
+    logAudit(wasCancelled ? 'booking_restored' : 'booking_edited', `${guestName} · ${roomLabel(room)} (${startDate} to ${endDate})${wasCancelled?' [restored]':''}`);
+    closeBookingModal(); render();
+    showToast(wasCancelled ? 'Booking restored and updated' : 'Booking updated');
+    return;
+  }
+
+  if(mode==='inherit'){
+    const stayGroupId = form.dataset.stayGroupId;
+    const conflictMsg = conflictCheck(roomId, startDate, endDate, null, sharing);
+    if(conflictMsg){ errBox.textContent = conflictMsg; errBox.classList.remove('hidden'); return; }
+    const newBooking = {
+      id: uid('bk'), roomId, roomTypeAtBooking: room.type, guestName, category, startDate, endDate, startTime, endTime, guestPhone, sharing, remarks,
+      stayGroupId, status: 'confirmed',
+      checkedIn:false, checkedOut:false, createdBy: state.role, createdAt: new Date().toISOString(),
+    };
+    DB.bookings.push(newBooking);
+    persistBooking(newBooking);
+    syncSecondOccupant(roomId, category, sharing);
+    logAudit('booking_created', `${guestName} → ${roomLabel(room)} (${startDate} to ${endDate}) [stay segment]`);
+    closeBookingModal(); render();
+    showToast('Room period added to stay');
+    return;
+  }
+
+  // mode === 'new'
+  const conflictMsg = conflictCheck(roomId, startDate, endDate, null, sharing)
+    || (draftConflict(roomId, startDate, endDate) ? `${roomLabel(room)} overlaps a period already added to this stay.` : null);
+  if(conflictMsg){ errBox.textContent = conflictMsg; errBox.classList.remove('hidden'); return; }
+
+  const allSegments = draftSegments.concat([{ roomId, startDate, endDate, startTime, endTime }]);
+  createStayBookings(allSegments, guestName, guestPhone, category, sharing, remarks);
+
+  /* The second occupant shares only the current/final room in this stay
+     (not every leg of a multi-room journey), and may have their own
+     arrival/departure dates independent of the primary occupant's. */
+  syncSecondOccupant(roomId, category, sharing);
+
+  logAudit('booking_created', `${guestName} → stay across ${allSegments.length} room period(s)`);
+  draftSegments = [];
+  closeBookingModal();
+  render();
+  showToast(allSegments.length>1 ? `Stay saved across ${allSegments.length} rooms` : 'Booking saved');
+}
+
+/* =========================================================================
+   DETAIL MODAL
+   ========================================================================= */
+function openDetailModal(bookingId){
+  const b = DB.bookings.find(x=>x.id===bookingId);
+  if(!b) return;
+  const groupId = b.stayGroupId;
+  /* Always include the booking that was actually tapped, even if it's
+     cancelled (so records can still be viewed) — but don't pull in other
+     unrelated cancelled siblings from the same group. */
+  const segments = (groupId ? DB.bookings.filter(x=>x.stayGroupId===groupId && (isActiveBooking(x) || x.id===b.id)) : [b])
+    .sort((a,c)=>a.startDate.localeCompare(c.startDate));
+  const primary = segments[0];
+  const overallStart = segments[0].startDate;
+  const overallEnd = segments[segments.length-1].endDate;
+
+  const body = document.getElementById('detailModalBody');
+  body.innerHTML = `
+    <div class="w-10 h-1 bg-mess-200 rounded-full mx-auto mb-3"></div>
+    <div class="flex items-center gap-2 mb-1">
+      ${segments.length>1?`<span class="text-[10px] bg-mess-100 text-mess-700 px-2 py-0.5 rounded-full font-medium">${segments.length}-room stay</span>`:''}
+      ${b.status!=='confirmed' ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-medium ml-auto" style="background:${BOOKING_STATUS_META[b.status].bg};color:${BOOKING_STATUS_META[b.status].color}">${BOOKING_STATUS_META[b.status].label}</span>` : ''}
+    </div>
+    <div class="font-display text-lg font-semibold text-mess-900">${primary.guestName}</div>
+    <div class="text-sm text-mess-600 mb-3">${fmtShort(overallStart)} – ${fmtEndDateShort(overallEnd)} overall stay</div>
+
+    <div class="space-y-2 mb-3">
+      ${segments.map(seg=>{
+        const room = getRoom(seg.roomId);
+        const meta = CATEGORY_META[categoryKeyFor(room, seg)];
+        const stampParts = [];
+        if(seg.checkedIn) stampParts.push('checked in');
+        if(seg.checkedOut) stampParts.push('checked out');
+        const partner = seg.sharing ? findShareSibling(seg) : null;
+        const isLive = isActiveBooking(seg);
+        const statusMeta = BOOKING_STATUS_META[seg.status];
+        const dateRange = seg.endDate
+          ? `${fmtShort(seg.startDate)} ${formatTimeShort(seg.startTime, DEFAULT_CHECKIN_TIME)} – ${fmtShort(seg.endDate)} ${formatTimeShort(seg.endTime, DEFAULT_CHECKOUT_TIME)}`
+          : `${fmtShort(seg.startDate)} ${formatTimeShort(seg.startTime, DEFAULT_CHECKIN_TIME)} – Ongoing`;
+        return `
+        <div class="flex items-center gap-2 bg-mess-50 rounded-lg px-3 py-2 ${!isLive?'opacity-90':''}">
+          <span class="w-2 h-2 rounded-full shrink-0" style="background:${meta.color}"></span>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-semibold text-mess-800 truncate">${roomLabel(room)}${seg.sharing?' · sharing':''}</div>
+            <div class="text-[11px] text-mess-500">${dateRange} &middot; ${meta.label}${stampParts.length?' &middot; '+stampParts.join(', '):''}${partner?' &middot; with '+partner.guestName:''}</div>
+          </div>
+          ${isLive ? `
+            <button onclick="editBooking('${seg.id}')" class="text-[10px] font-semibold text-brass-700 shrink-0 px-1">Edit</button>
+            <button onclick="cancelBooking('${seg.id}')" class="text-[10px] font-semibold text-red-600 shrink-0 px-1">Cancel</button>
+          ` : `
+            <span class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0" style="background:${statusMeta.bg};color:${statusMeta.color}">${statusMeta.label}</span>
+            <button onclick="editBooking('${seg.id}')" class="text-[10px] font-semibold text-brass-700 shrink-0 px-1">Edit</button>
+            <button onclick="restoreBooking('${seg.id}')" class="text-[10px] font-semibold text-mess-700 shrink-0 px-1">Restore</button>
+          `}
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="grid grid-cols-2 gap-2 mb-3 text-xs">
+      <div class="bg-mess-50 rounded-lg px-3 py-2">
+        <div class="text-mess-400">Contact number</div>
+        <div class="font-medium text-mess-800">${formatPhoneDisplay(primary.guestPhone)}</div>
+      </div>
+      <div class="bg-mess-50 rounded-lg px-3 py-2">
+        <div class="text-mess-400">Booked by</div>
+        <div class="font-medium text-mess-800">${primary.createdBy}</div>
+      </div>
+    </div>
+
+    ${primary.remarks ? `
+    <div class="bg-mess-50 rounded-lg px-3 py-2 mb-3 text-xs">
+      <div class="text-mess-400">Remarks</div>
+      <div class="font-medium text-mess-800 whitespace-pre-wrap">${primary.remarks}</div>
+    </div>` : ''}
+
+    ${isActiveBooking(b) ? `
+    <div class="flex gap-2 mb-2">
+      ${b.endDate ? `<button onclick="addStaySegment('${b.id}')" class="flex-1 py-2.5 rounded-xl bg-mess-50 text-mess-700 text-xs font-semibold border border-mess-200">+ Add room period</button>` : ''}
+      <button onclick="openWaModal('${b.id}')" class="flex-1 py-2.5 rounded-xl bg-[#25D366]/10 text-[#128C4A] text-xs font-semibold">WhatsApp</button>
+    </div>` : ''}
+    <button onclick="closeDetailModal()" class="w-full py-2.5 rounded-xl border border-mess-200 text-mess-700 text-xs font-semibold">Close</button>
+  `;
+  document.getElementById('detailModal').classList.remove('hidden');
+}
+function closeDetailModal(){ document.getElementById('detailModal').classList.add('hidden'); }
+function editBooking(id){ closeDetailModal(); openBookingModal(null, null, id); }
+function addStaySegment(bookingId){
+  const source = DB.bookings.find(x=>x.id===bookingId);
+  if(!source) return;
+  if(!source.stayGroupId){ source.stayGroupId = uid('stay'); persistBooking(source); }
+  closeDetailModal();
+  openBookingModal(null, null, null, source);
+}
+function cancelBooking(id){
+  const b = DB.bookings.find(x=>x.id===id);
+  if(!b) return;
+  b.status = 'cancelled';
+  persistBooking(b);
+  logAudit('booking_cancelled', `${b.guestName} · ${roomLabel(getRoom(b.roomId))}`);
+  closeDetailModal(); render();
+  showToast('Booking cancelled');
+}
+/* Reinstates a cancelled booking for its existing room/dates, provided
+   nothing else has since taken that slot. If the room is no longer free,
+   the person can use Edit to pick a different room or dates instead —
+   saving an edit on a cancelled booking restores it automatically too. */
+function restoreBooking(id){
+  const b = DB.bookings.find(x=>x.id===id);
+  if(!b) return;
+  const msg = conflictCheck(b.roomId, b.startDate, b.endDate, b.id, b.sharing);
+  if(msg){
+    showToast(`Cannot restore — ${msg} Edit the booking to pick a different room or dates.`, 'error');
+    return;
+  }
+  b.status = 'confirmed';
+  persistBooking(b);
+  logAudit('booking_restored', `${b.guestName} · ${roomLabel(getRoom(b.roomId))}`);
+  render();
+  openDetailModal(id);
+  showToast('Booking restored');
+}
+
+/* =========================================================================
+   DAILY MOVEMENT SHEET
+   ========================================================================= */
+function renderMovement(){
+  const today = todayISO();
+  let arrivals = DB.bookings.filter(b=>b.startDate===today && isActiveBooking(b));
+  let departures = DB.bookings.filter(b=>b.endDate===today && isActiveBooking(b));
+  if(state.movementFilter==='arrivals') departures=[];
+  if(state.movementFilter==='departures') arrivals=[];
+
+  function row(b, kind){
+    const room = getRoom(b.roomId);
+    const catKey = categoryKeyFor(room, b);
+    const done = kind==='arrival' ? b.checkedIn : b.checkedOut;
+    const timeLabel = kind==='arrival' ? formatTimeShort(b.startTime, DEFAULT_CHECKIN_TIME) : formatTimeShort(b.endTime, DEFAULT_CHECKOUT_TIME);
+    return `
+      <div class="bg-white rounded-xl border border-mess-100 p-3 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-mono-num font-semibold shrink-0"
+             style="background:${CATEGORY_META[catKey].bg}; color:${CATEGORY_META[catKey].color}">
+          ${room.type==='vip' ? 'VIP' : room.roomNo}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-mess-900 truncate">${b.guestName}${b.sharing?' <span class=\"text-[10px] text-mess-400\">(sharing)</span>':''}</div>
+          <div class="text-[11px] text-mess-500">${roomLabel(room)} &middot; ${CATEGORY_META[catKey].label} &middot; ${timeLabel}${b.stayGroupId?' &middot; multi-room stay':''}</div>
+        </div>
+        <button onclick="toggleMovement('${b.id}','${kind}')"
+          class="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold ${done? 'bg-mess-700 text-white' : 'bg-mess-50 text-mess-600 border border-mess-200'}">
+          ${done ? (kind==='arrival'?'Checked in':'Checked out') : (kind==='arrival'?'Check in':'Check out')}
+        </button>
+      </div>`;
+  }
+
+  return `
+  <div class="px-4 lg:px-6 pt-4 lg:pt-6 space-y-4">
+    <div class="flex items-center justify-between">
+      <div class="font-display uppercase text-sm font-semibold text-mess-800">Daily Movement Sheet</div>
+      <div class="text-xs text-mess-500 font-mono-num">${fmtLong(today)}</div>
+    </div>
+
+    <div class="flex gap-1.5">
+      ${[['all','All'],['arrivals','Arrivals'],['departures','Departures']].map(([k,l])=>`
+        <button onclick="setMovementFilter('${k}')" class="px-3 py-1.5 rounded-full text-[11px] font-medium border ${state.movementFilter===k?'bg-mess-700 text-white border-mess-700':'bg-white text-mess-600 border-mess-200'}">${l}</button>
+      `).join('')}
+    </div>
+
+    ${(() => {
+      const bothVisible = state.movementFilter === 'all';
+      const colClass = bothVisible ? '' : 'lg:col-span-2';
+      return `
+    <div class="lg:grid lg:grid-cols-2 lg:gap-5 space-y-4 lg:space-y-0">
+      ${state.movementFilter!=='departures' ? `
+      <div class="${colClass}">
+        <div class="text-xs font-semibold text-mess-500 mb-2">Arrivals (${arrivals.length})</div>
+        <div class="space-y-2">${arrivals.map(b=>row(b,'arrival')).join('') || '<div class="text-xs text-mess-400 px-1">No arrivals scheduled today.</div>'}</div>
+      </div>` : ''}
+
+      ${state.movementFilter!=='arrivals' ? `
+      <div class="${colClass}">
+        <div class="text-xs font-semibold text-mess-500 mb-2">Departures (${departures.length})</div>
+        <div class="space-y-2">${departures.map(b=>row(b,'departure')).join('') || '<div class="text-xs text-mess-400 px-1">No departures scheduled today.</div>'}</div>
+      </div>` : ''}
+    </div>`;
+    })()}
+  </div>`;
+}
+function setMovementFilter(f){ state.movementFilter = f; render(); }
+function toggleMovement(id, kind){
+  const b = DB.bookings.find(x=>x.id===id);
+  if(!b) return;
+  if(kind==='arrival') b.checkedIn = !b.checkedIn; else b.checkedOut = !b.checkedOut;
+  persistBooking(b);
+  logAudit(kind==='arrival'?'check_in_toggled':'check_out_toggled', `${b.guestName} → ${(kind==='arrival'?b.checkedIn:b.checkedOut)}`);
+  render();
+}
+/* =========================================================================
+   WHATSAPP INTIMATION
+   ========================================================================= */
+function openWaModal(bookingId){
+  const b = DB.bookings.find(x=>x.id===bookingId);
+  if(!b) return;
+  const room = getRoom(b.roomId);
+  state.waBookingId = bookingId;
+  const catShort = CATEGORY_SHORT[categoryKeyFor(room,b)] || CATEGORY_META[categoryKeyFor(room,b)].label;
+  const orderlyLines = RECEPTION_ORDERLIES.map(o=>`${o.name}     ${o.phone}`).join('\n');
+  const depLine = b.endDate
+    ? `- Dep Date - ${fmtDMY2(b.endDate)} & ${formatTimeHrs(b.endTime, DEFAULT_CHECKOUT_TIME)}`
+    : `- Living-in — no departure date; stays until posted out`;
+  const msg =
+`Dear Sir/Ma'am,
+
+Your Accomodation booking is confirmed at Officers' Mess, Air Force Academy as per details given below:-
+
+${b.guestName}
+
+- Room no- ${roomLabel(room)} (${catShort})
+- Arr Date - ${fmtDMY2(b.startDate)} & ${formatTimeHrs(b.startTime, DEFAULT_CHECKIN_TIME)}
+${depLine}
+- Retired officers/ Dependents / Civilian guests are requested to provide photo ID
+
+Regards
+
+*Contact nos of Reception Orderlies are 👇
+
+${orderlyLines}
+
+Regards,
+Officers Mess, AFA`;
+  document.getElementById('waText').value = msg;
+  updateWaLink();
+  document.getElementById('waModal').classList.remove('hidden');
+}
+function updateWaLink(){
+  const text = document.getElementById('waText').value;
+  const b = DB.bookings.find(x=>x.id===state.waBookingId);
+  let phone = ((b && b.guestPhone) || '').replace(/\D/g,'');
+  if(phone && phone.length===10) phone = '91'+phone;
+  const link = document.getElementById('waLink');
+  const warn = document.getElementById('waPhoneWarn');
+  const ok = document.getElementById('waPhoneOk');
+  if(!phone){ warn.classList.remove('hidden'); ok.classList.add('hidden'); link.classList.add('opacity-50','pointer-events-none'); }
+  else { warn.classList.add('hidden'); ok.classList.remove('hidden'); link.classList.remove('opacity-50','pointer-events-none'); }
+  link.href = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+}
+document.addEventListener('input', (e)=>{ if(e.target.id==='waText') updateWaLink(); });
+function closeWaModal(){ document.getElementById('waModal').classList.add('hidden'); }
+
+/* =========================================================================
+   ADMIN PANEL
+   ========================================================================= */
+/* =========================================================================
+   RECORDS — a searchable log of every booking ever made: confirmed or
+   cancelled; past, present, or future. Nothing is ever hard-deleted (see
+   isActiveBooking / cancelBooking), so this is the permanent institutional
+   record.
+   ========================================================================= */
+const RECORDS_STATUS_FILTERS = ['all','confirmed','cancelled'];
+function recordsStatusLabel(k){ return k==='all' ? 'All' : BOOKING_STATUS_META[k].label; }
+function recordsStatusColor(k){ return k==='all' ? '#122d5e' : BOOKING_STATUS_META[k].color; }
+
+function bookingMatchesRecordsSearch(b, q){
+  if(!q) return true;
+  const room = getRoom(b.roomId);
+  if(!room) return false;
+  const catLabel = (CATEGORY_META[categoryKeyFor(room,b)]||{}).label || '';
+  return (b.guestName||'').toLowerCase().includes(q)
+    || (b.remarks||'').toLowerCase().includes(q)
+    || (b.guestPhone||'').toLowerCase().includes(q)
+    || catLabel.toLowerCase().includes(q)
+    || (b.createdBy||'').toLowerCase().includes(q)
+    || roomFullNumber(room).toLowerCase().includes(q)
+    || (room.name||'').toLowerCase().includes(q);
+}
+
+/* =========================================================================
+   GUEST REQUESTS — now backed by real Firestore (Phase 3).
+   Requests submitted through the guest-facing portal (guest-booking.html)
+   live at bookingRequests/{phone}/items/{requestId}, kept in sync here via
+   the collection-group listener in startFirestoreSync() (see
+   fsOnSnapshotGroup('items', ...)), mirrored into DB.guestRequests exactly
+   like bookings/rooms/blocks. loadGuestRequests() now just reads that live
+   array — no localStorage, no manual refresh needed.
+   ========================================================================= */
+function loadGuestRequests(){
+  return DB.guestRequests;
+}
+/* Separate from BOOKING_STATUS_META (confirmed/cancelled bookings) since a
+   *request* has its own lifecycle — pending/approved/rejected/cancelled —
+   before it ever becomes a real booking. Matches guest-booking.html. */
+const REQUEST_STATUS_META = {
+  pending:   { label:'Pending review', color:'#A9762F', bg:'#FAF5EA' },
+  approved:  { label:'Approved',       color:'#3F9A63', bg:'#EAF6EF' },
+  rejected:  { label:'Not approved',   color:'#C0392B', bg:'#FBEAEA' },
+  cancelled: { label:'Cancelled',      color:'#7A8699', bg:'#EEF0F3' },
+};
+function requestSpan(req){
+  const starts = req.rooms.map(r=>r.startDate).sort();
+  const ends = req.rooms.map(r=>r.endDate).sort();
+  return { start: starts[0], end: ends[ends.length-1] };
+}
+
+/* =========================================================================
+   GUEST REQUESTS — Phase 2, Step 2 (room allocation)
+   For each room a guest asked for, staff pick a REAL, currently-available
+   room — reusing conflictCheck() against the live DB.bookings/DB.rooms
+   exactly the way the booking modal does, so "available" here means the
+   same thing it means everywhere else in this app. A guest-portal request
+   is always one party in one room (never the app's "sharing" concept,
+   which is two independent bookings coexisting in one room), so sharing
+   is hardcoded false throughout.
+   Allocation choices are held in state.requestAllocations, keyed by
+   request id, as a draft — nothing is booked yet. Step 3 adds Approve,
+   which reads this same draft state to create the real booking(s).
+   ========================================================================= */
+function availableRoomsForRange(startDate, endDate, excludeId){
+  if(!startDate || (endDate && endDate < startDate)) return [];
+  return DB.blocks.filter(b=>b.active).map(block=>{
+    const rooms = roomsForBlock(block.id).filter(r=>r.status==='available')
+      .filter(r=>!conflictCheck(r.id, startDate, endDate, excludeId, false));
+    return { block, rooms };
+  }).filter(g=>g.rooms.length>0);
+}
+function getOrInitAllocation(reqId, roomIndex, askRoom){
+  if(!state.requestAllocations[reqId]) state.requestAllocations[reqId] = [];
+  if(!state.requestAllocations[reqId][roomIndex]){
+    state.requestAllocations[reqId][roomIndex] = {
+      startDate: askRoom.startDate, endDate: askRoom.endDate,
+      startTime: askRoom.startTime || DEFAULT_CHECKIN_TIME,
+      endTime: askRoom.endTime || DEFAULT_CHECKOUT_TIME,
+      roomId: '',
+      openEnded: false, // tracked explicitly — an empty/blank endDate is NOT
+                         // the same thing as "confirmed open-ended", since
+                         // both are falsy and can't be told apart otherwise
+    };
+  }
+  return state.requestAllocations[reqId][roomIndex];
+}
+function updateAllocationField(reqId, roomIndex, field, value){
+  const alloc = state.requestAllocations[reqId][roomIndex];
+  alloc[field] = value;
+  // If a date change makes the previously-picked room unavailable, drop it
+  // rather than silently keep a now-invalid selection.
+  if((field==='startDate' || field==='endDate') && alloc.roomId){
+    if(conflictCheck(alloc.roomId, alloc.startDate, alloc.endDate, null, false)) alloc.roomId = '';
+  }
+  render();
+}
+function toggleAllocationOpenEnded(reqId, roomIndex, checked){
+  const alloc = state.requestAllocations[reqId][roomIndex];
+  alloc.openEnded = checked;
+  if(checked){
+    alloc.endDate = null;
+    alloc.endTime = null;
+  } else {
+    // Unchecking restores the guest's originally-asked date as a sensible
+    // starting point, rather than leaving the field blank for no reason.
+    const req = loadGuestRequests().find(r=>r.id===reqId);
+    const askRoom = req && req.rooms[roomIndex];
+    alloc.endDate = (askRoom && askRoom.endDate) || '';
+    alloc.endTime = (askRoom && askRoom.endTime) || '';
+  }
+  if(alloc.roomId && conflictCheck(alloc.roomId, alloc.startDate, alloc.endDate, null, false)) alloc.roomId = '';
+  render();
+}
+function renderAllocationPanel(req, roomIndex, askRoom){
+  const alloc = getOrInitAllocation(req.id, roomIndex, askRoom);
+  const groups = availableRoomsForRange(alloc.startDate, alloc.endDate);
+  const optionsHtml = groups.length
+    ? groups.map(g=>`<optgroup label="${g.block.name}">${g.rooms.map(r=>`<option value="${r.id}" ${alloc.roomId===r.id?'selected':''}>${roomLabel(r)}</option>`).join('')}</optgroup>`).join('')
+    : `<option value="">No rooms available for these dates</option>`;
+  const isLivingIn = req.purpose === 'LivingIn';
+  const openEnded = isLivingIn && alloc.openEnded;
+
+  return `
+  <div class="border border-mess-200 rounded-lg p-2.5 mb-1.5 bg-white">
+    <div class="grid grid-cols-2 gap-1.5 mb-1.5">
+      <input type="date" value="${alloc.startDate}" onchange="updateAllocationField('${req.id}',${roomIndex},'startDate',this.value)" class="border border-mess-200 rounded-lg px-2 py-1.5 text-xs">
+      <input type="time" value="${alloc.startTime}" onchange="updateAllocationField('${req.id}',${roomIndex},'startTime',this.value)" class="border border-mess-200 rounded-lg px-2 py-1.5 text-xs">
+      <input type="date" value="${alloc.endDate||''}" min="${alloc.startDate}" ${openEnded?'disabled':''} onchange="updateAllocationField('${req.id}',${roomIndex},'endDate',this.value)" class="border border-mess-200 rounded-lg px-2 py-1.5 text-xs">
+      <input type="time" value="${alloc.endTime||''}" ${openEnded?'disabled':''} onchange="updateAllocationField('${req.id}',${roomIndex},'endTime',this.value)" class="border border-mess-200 rounded-lg px-2 py-1.5 text-xs">
+    </div>
+    ${isLivingIn ? `
+    <label class="flex items-center gap-1.5 mb-1.5">
+      <input type="checkbox" ${openEnded?'checked':''} onchange="toggleAllocationOpenEnded('${req.id}',${roomIndex},this.checked)">
+      <span class="text-[11px] text-mess-600">No checkout date yet — stays until posted out</span>
+    </label>` : ''}
+    <select onchange="updateAllocationField('${req.id}',${roomIndex},'roomId',this.value)" class="w-full border border-mess-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+      <option value="">Select a room…</option>
+      ${optionsHtml}
+    </select>
+  </div>`;
+}
+
+/* Write-back counterpart to loadGuestRequests(). Writes directly to the
+   request's own document at bookingRequests/{phone}/items/{id} — the same
+   path the guest portal itself reads/writes, kept live for every signed-in
+   admin device via the collection-group listener (no manual refresh). */
+function updateGuestRequest(req, patch){
+  return window.fsUpdateNestedDoc(['bookingRequests', req.phone, 'items', req.id], patch)
+    .catch(err=>console.error('Guest request update failed', err));
+}
+
+/* =========================================================================
+   GUEST REQUESTS — Phase 2, Step 3 (approve / reject)
+   Approve reads the draft allocations from Step 2, re-verifies each one is
+   STILL conflict-free right before committing (dates or other bookings may
+   have changed since the dropdown was last populated), then creates one
+   real booking per allocated room via the same DB.bookings + persistBooking
+   path every other booking in this app goes through — nothing special-cased.
+   The guest-portal request has no per-room "occupant count" field in the
+   main booking schema (guestName/category/dates only), so each booking's
+   remarks are seeded with a short party summary (adults, children ages,
+   extra bedding) folded in with the guest's own remarks, so that detail
+   isn't lost once the request record is no longer the primary view.
+   Multiple simultaneous rooms from one request are linked by
+   requestGroupId — deliberately NOT stayGroupId, which means something
+   different elsewhere in this app (sequential room changes for one guest,
+   not a family occupying several rooms at once).
+   ========================================================================= */
+function approveRequest(reqId){
+  const all = loadGuestRequests();
+  const req = all.find(r=>r.id===reqId);
+  if(!req) return;
+  const allocations = state.requestAllocations[reqId] || [];
+
+  if(allocations.length < req.rooms.length || allocations.some(a=>!a || !a.roomId)){
+    showToast('Allocate a room for every room requested before approving.', 'error');
+    return;
+  }
+  for(let i=0;i<allocations.length;i++){
+    const a = allocations[i];
+    const msg = conflictCheck(a.roomId, a.startDate, a.endDate, null, false);
+    if(msg){
+      showToast(`Room ${i+1}: ${msg} Please re-allocate.`, 'error');
+      return;
+    }
+  }
+
+  const requestGroupId = allocations.length>1 ? uid('reqgrp') : null;
+  const resultingBookingIds = [];
+  allocations.forEach((a, i)=>{
+    const askRoom = req.rooms[i];
+    const room = getRoom(a.roomId);
+    const partyBits = [`${askRoom.adults} adult${askRoom.adults===1?'':'s'}`];
+    if(askRoom.children && askRoom.children.length){
+      partyBits.push(askRoom.children.length + ' child' + (askRoom.children.length===1?'':'ren') + ' (age ' + askRoom.children.map(c=>c.age===0?'<1':c.age).join(', ') + ')');
+    }
+    if(askRoom.extraBedding) partyBits.push('extra bedding requested');
+    const remarks = [partyBits.join(', '), req.remarks].filter(Boolean).join(' — ');
+
+    const booking = {
+      id: uid('bk'), roomId: a.roomId, roomTypeAtBooking: room.type,
+      guestName: req.contactName, category: req.purpose,
+      startDate: a.startDate, endDate: a.endDate,
+      startTime: a.startTime || DEFAULT_CHECKIN_TIME, endTime: a.endDate ? (a.endTime || DEFAULT_CHECKOUT_TIME) : null,
+      guestPhone: req.phone, sharing: false, remarks,
+      stayGroupId: null, requestGroupId,
+      status: 'confirmed', checkedIn:false, checkedOut:false,
+      createdBy: state.role, createdAt: new Date().toISOString(),
+    };
+    DB.bookings.push(booking);
+    persistBooking(booking);
+    resultingBookingIds.push(booking.id);
+  });
+
+  const decidedAt = new Date().toISOString();
+  updateGuestRequest(req, {
+    status: 'approved',
+    resultingBookingIds,
+    decidedAt,
+    decidedBy: state.role,
+  });
+  // Optimistically reflect the change locally too, so the UI doesn't wait
+  // for the collection-group listener's own round trip to catch up.
+  req.status = 'approved';
+  req.resultingBookingIds = resultingBookingIds;
+  req.decidedAt = decidedAt;
+  req.decidedBy = state.role;
+
+  delete state.requestAllocations[reqId];
+  logAudit('guest_request_approved', `${req.contactName} approved — ${resultingBookingIds.length} room(s) booked`);
+  render();
+  showToast(resultingBookingIds.length>1 ? `Approved — ${resultingBookingIds.length} rooms booked` : 'Approved — room booked');
+}
+/* Reject shows an inline reason panel in place (this app never uses native
+   window.confirm/prompt dialogs — every other action here uses an in-page
+   panel or modal, so Reject follows the same convention). */
+function startReject(reqId){ state.rejectingId = reqId; render(); }
+function cancelReject(){ state.rejectingId = null; render(); }
+function confirmReject(reqId){
+  const reasonEl = document.getElementById('rejectReason_' + reqId);
+  const reason = reasonEl ? reasonEl.value.trim() : '';
+  const all = loadGuestRequests();
+  const req = all.find(r=>r.id===reqId);
+  if(!req) return;
+  const decidedAt = new Date().toISOString();
+  updateGuestRequest(req, {
+    status: 'rejected',
+    rejectionReason: reason,
+    decidedAt,
+    decidedBy: state.role,
+  });
+  req.status = 'rejected';
+  req.rejectionReason = reason;
+  req.decidedAt = decidedAt;
+  req.decidedBy = state.role;
+
+  delete state.requestAllocations[reqId];
+  state.rejectingId = null;
+  logAudit('guest_request_rejected', `${req.contactName}${reason ? ' — ' + reason : ''}`);
+  render();
+  showToast('Request rejected');
+}
+
+const REQUESTS_STATUS_FILTERS = ['pending','approved','rejected','cancelled'];
+function setRequestsStatusFilter(k){ state.requestsStatusFilter = k; render(); }
+function toggleRequestExpanded(id){ state.expandedRequestIds[id] = !state.expandedRequestIds[id]; render(); }
+/* Read-only summary shown in place of the allocation panel/actions once a
+   request is no longer pending — what was decided, by whom, and when. */
+function renderDecisionSummary(req){
+  const decidedDate = req.decidedAt ? fmtLong(req.decidedAt.slice(0,10)) : '—';
+  if(req.status==='approved'){
+    /* Always read the booking's CURRENT status/dates from DB.bookings here,
+       rather than anything cached on the request — DB.bookings is this
+       app's single source of truth for a booking's state everywhere else
+       (see isActiveBooking()), so if staff later cancel or edit one of
+       these rooms via the normal Records/Detail flow, this view reflects
+       that immediately on next render, with no separate sync step needed. */
+    const bookings = (req.resultingBookingIds||[]).map(id=>DB.bookings.find(b=>b.id===id)).filter(Boolean);
+    const cancelledCount = bookings.filter(b=>b.status==='cancelled').length;
+
+    const roomsList = bookings.length
+      ? bookings.map(b=>{
+          const isCancelled = b.status==='cancelled';
+          return `${roomLabel(getRoom(b.roomId))} (${fmtShort(b.startDate)} – ${fmtEndDateShort(b.endDate)})${isCancelled ? ' <span class="text-red-600 font-medium">— Cancelled</span>' : ''}`;
+        }).join(', ')
+      : 'Details unavailable — the underlying booking may have since been removed.';
+
+    let aggregateNote = '';
+    if(bookings.length && cancelledCount===bookings.length){
+      aggregateNote = `<div class="text-[11px] font-medium text-red-600 mt-1">All rooms from this approval have since been cancelled.</div>`;
+    } else if(cancelledCount>0){
+      aggregateNote = `<div class="text-[11px] font-medium text-brass-700 mt-1">${cancelledCount} of ${bookings.length} rooms from this approval have since been cancelled.</div>`;
+    }
+
+    return `<div class="text-[11px] text-mess-600 mt-2 border-t border-mess-100 pt-2">
+      Approved by ${req.decidedBy||'—'} on ${decidedDate}<br>
+      <span class="text-mess-400">Rooms:</span> ${roomsList}
+      ${aggregateNote}
+    </div>`;
+  }
+  if(req.status==='rejected'){
+    return `<div class="text-[11px] text-mess-600 mt-2 border-t border-mess-100 pt-2">
+      Rejected by ${req.decidedBy||'—'} on ${decidedDate}
+      ${req.rejectionReason ? `<br><span class="text-mess-400">Reason:</span> ${req.rejectionReason}` : ''}
+    </div>`;
+  }
+  if(req.status==='cancelled'){
+    // Guests cancel their own pending/approved requests from the guest
+    // portal directly — there is no admin decidedBy for that path.
+    return `<div class="text-[11px] text-mess-600 mt-2 border-t border-mess-100 pt-2">Cancelled${req.decidedBy ? ' by ' + req.decidedBy : ' by the guest'}</div>`;
+  }
+  return '';
+}
+
+function renderRequests(){
+  const all = loadGuestRequests();
+  const filter = state.requestsStatusFilter;
+  const counts = {};
+  REQUESTS_STATUS_FILTERS.forEach(k => counts[k] = all.filter(r=>r.status===k).length);
+
+  const filtered = all.filter(r=>r.status===filter).sort((a,b)=>{
+    // Pending: oldest first, first-come-first-served. Decided ones: most
+    // recent decision first, so the freshest outcomes surface on top.
+    if(filter==='pending') return (a.createdAt||'').localeCompare(b.createdAt||'');
+    return (b.decidedAt||b.createdAt||'').localeCompare(a.decidedAt||a.createdAt||'');
+  });
+
+  const cards = filtered.map(req=>{
+    const span = requestSpan(req);
+    const purposeLabel = (CATEGORY_META[req.purpose]||{}).label || req.purpose;
+    const isPending = req.status === 'pending';
+    const allocatedCount = (state.requestAllocations[req.id]||[]).filter(a=>a && a.roomId).length;
+    const statusMeta = REQUEST_STATUS_META[req.status];
+    const expanded = !!state.expandedRequestIds[req.id];
+
+    const roomsHtml = req.rooms.map((r,i)=>`
+      <div class="bg-mess-50 rounded-lg px-3 py-2 mb-1.5">
+        <div class="text-[11px] font-semibold text-mess-700">Room ${i+1} request</div>
+        <div class="text-[11px] text-mess-600 mt-0.5">${fmtShort(r.startDate)} ${r.startTime||''} &rarr; ${fmtShort(r.endDate)} ${r.endTime||''}</div>
+        <div class="text-[11px] text-mess-600 mt-0.5">${r.adults} adult${r.adults===1?'':'s'}${r.children && r.children.length ? ', ' + r.children.length + ' child' + (r.children.length===1?'':'ren') + ' (age ' + r.children.map(c=>c.age===0?'<1':c.age).join(', ') + ')' : ''}</div>
+        ${r.extraBedding ? `<div class="text-[10px] text-brass-700 mt-0.5">+ Extra bedding requested</div>` : ''}
+        ${isPending ? renderAllocationPanel(req, i, r) : ''}
+      </div>`).join('');
+
+    // Live check (not stored) so an Approved card's header badge reflects
+    // a later booking cancellation immediately, same principle as
+    // renderDecisionSummary's room-by-room status.
+    let cancelledBadge = '';
+    if(req.status==='approved' && req.resultingBookingIds && req.resultingBookingIds.length){
+      const liveBookings = req.resultingBookingIds.map(id=>DB.bookings.find(b=>b.id===id)).filter(Boolean);
+      const cancelledN = liveBookings.filter(b=>b.status==='cancelled').length;
+      if(liveBookings.length && cancelledN===liveBookings.length){
+        cancelledBadge = `<span class="text-[9px] font-semibold px-2 py-1 rounded-full bg-mess-100 text-mess-500">All rooms cancelled</span>`;
+      } else if(cancelledN>0){
+        cancelledBadge = `<span class="text-[9px] font-semibold px-2 py-1 rounded-full bg-gold-100 text-gold-700">${cancelledN}/${liveBookings.length} cancelled</span>`;
+      }
+    }
+
+    const actionsHtml = !isPending ? renderDecisionSummary(req) : (
+      state.rejectingId === req.id ? `
+        <div class="mt-2.5 border-t border-mess-100 pt-2.5">
+          <textarea id="rejectReason_${req.id}" rows="2" placeholder="Reason for rejecting (optional)" class="w-full border border-mess-200 rounded-lg px-2.5 py-1.5 text-xs mb-1.5"></textarea>
+          <div class="flex gap-1.5">
+            <button onclick="cancelReject()" class="flex-1 py-2 rounded-lg border border-mess-200 text-mess-700 text-[11px] font-semibold">Cancel</button>
+            <button onclick="confirmReject('${req.id}')" class="flex-1 py-2 rounded-lg bg-red-600 text-white text-[11px] font-semibold">Confirm reject</button>
+          </div>
+        </div>
+      ` : `
+        <div class="flex gap-1.5 mt-2.5 border-t border-mess-100 pt-2.5">
+          <button onclick="startReject('${req.id}')" class="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[11px] font-semibold">Reject</button>
+          <button ${allocatedCount===req.rooms.length ? `onclick="approveRequest('${req.id}')"` : 'disabled'} class="flex-1 py-2 rounded-lg text-[11px] font-semibold ${allocatedCount===req.rooms.length ? 'bg-mess-700 text-white' : 'bg-mess-100 text-mess-400'}">Approve</button>
+        </div>
+      `
+    );
+
+    return `
+    <div class="bg-white border border-mess-100 rounded-xl p-3.5 mb-3">
+      <div onclick="toggleRequestExpanded('${req.id}')" class="cursor-pointer">
+        <div class="flex items-center justify-between mb-1.5 gap-1.5 flex-wrap">
+          <span class="text-[9px] font-semibold px-2 py-1 rounded-full" style="background:${statusMeta.bg};color:${statusMeta.color}">${statusMeta.label}</span>
+          ${cancelledBadge}
+          ${isPending ? `<span class="text-[10px] text-mess-500 ml-auto">${allocatedCount}/${req.rooms.length} allocated</span>` : ''}
+        </div>
+        ${req.overlapsExisting ? `<div class="text-[11px] bg-red-50 text-red-700 border border-red-100 rounded-lg px-2.5 py-1.5 mb-2">⚠ Overlaps an existing confirmed booking under this phone number — verify before relying on this record.</div>` : ''}
+        <div class="text-sm font-semibold text-mess-900">${req.contactName}</div>
+        <div class="text-[11px] text-mess-500">${formatPhoneDisplay(req.phone)} &middot; ${purposeLabel} &middot; ${fmtShort(span.start)} – ${fmtShort(span.end)} &middot; ${req.rooms.length} room${req.rooms.length===1?'':'s'}</div>
+        <div class="text-[10px] text-mess-400 mt-1">${expanded ? 'Tap to collapse' : 'Tap for details'} &rsaquo;</div>
+      </div>
+      ${expanded ? `
+        <div class="mt-2 pt-2 border-t border-mess-100">
+          ${roomsHtml}
+          ${req.remarks ? `<div class="text-[11px] text-mess-500 mt-1"><span class="text-mess-400">Remarks:</span> ${req.remarks}</div>` : ''}
+          ${actionsHtml}
+        </div>` : ''}
+    </div>`;
+  }).join('') || `<div class="text-center text-sm text-mess-400 py-10">No ${filter} requests.</div>`;
+
+  const chips = REQUESTS_STATUS_FILTERS.map(k=>{
+    const active = filter===k;
+    const color = REQUEST_STATUS_META[k].color;
+    return `<button onclick="setRequestsStatusFilter('${k}')" class="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border"
+      style="${active?`background:${color};color:white;border-color:${color}`:`color:${color};border-color:${color}55;background:white`}">${REQUEST_STATUS_META[k].label} (${counts[k]})</button>`;
+  }).join('');
+
+  return `
+  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
+    <div class="flex items-center justify-between mb-2">
+      <div class="font-display uppercase text-sm font-semibold text-mess-800">Guest Requests</div>
+      <button onclick="render()" class="text-[11px] font-semibold text-mess-600 border border-mess-200 rounded-full px-3 py-1">Refresh</button>
+    </div>
+    <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-1">${chips}</div>
+  </div>
+  <div class="px-4 lg:px-6 pb-6 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">${cards}</div>`;
+}
+
+function renderRecords(){
+  const q = state.recordsSearch.trim().toLowerCase();
+  let bookings = DB.bookings.filter(b => !!getRoom(b.roomId));
+  if(state.recordsStatusFilter!=='all') bookings = bookings.filter(b=>b.status===state.recordsStatusFilter);
+  if(q) bookings = bookings.filter(b=>bookingMatchesRecordsSearch(b,q));
+  bookings = bookings.slice().sort((a,c)=> c.startDate.localeCompare(a.startDate) || (c.createdAt||'').localeCompare(a.createdAt||''));
+
+  const rows = bookings.map(b=>{
+    const room = getRoom(b.roomId);
+    const meta = CATEGORY_META[categoryKeyFor(room,b)];
+    const statusMeta = BOOKING_STATUS_META[b.status];
+    return `
+    <button onclick="openDetailModal('${b.id}')" class="w-full text-left bg-white border border-mess-100 rounded-xl p-3 flex items-center gap-3 mb-2 active:opacity-70">
+      <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${meta.color}"></span>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-mess-900 truncate">${b.guestName}${b.sharing?' <span class="text-[10px] text-mess-400">(sharing)</span>':''}</div>
+        <div class="text-[11px] text-mess-500 truncate">${roomLabel(room)} &middot; ${fmtShort(b.startDate)} – ${fmtEndDateShort(b.endDate)} &middot; ${meta.label}</div>
+      </div>
+      <span class="text-[9px] font-semibold px-2 py-1 rounded-full shrink-0" style="background:${statusMeta.bg};color:${statusMeta.color}">${statusMeta.label}</span>
+    </button>`;
+  }).join('') || `<div class="text-center text-sm text-mess-400 py-10">No matching bookings found.</div>`;
+
+  return `
+  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
+    <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-3">Booking Records</div>
+    <div class="relative mb-3 lg:max-w-md">
+      <input type="text" oninput="onRecordsSearch(this.value)" value="${state.recordsSearch}" placeholder="Search name, room, contact, remarks..."
+        class="w-full border border-mess-200 rounded-lg pl-3 ${state.recordsSearch?'pr-8':'pr-3'} py-2 text-sm bg-white">
+      ${state.recordsSearch ? `<button type="button" onclick="clearRecordsSearch()" aria-label="Clear search" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-mess-100 text-mess-500 flex items-center justify-center text-xs leading-none">✕</button>` : ''}
+    </div>
+    <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-2">
+      ${RECORDS_STATUS_FILTERS.map(k=>{
+        const active = state.recordsStatusFilter===k;
+        const color = recordsStatusColor(k);
+        return `<button onclick="setRecordsStatusFilter('${k}')" class="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border"
+          style="${active?`background:${color};color:white;border-color:${color}`:`color:${color};border-color:${color}55;background:white`}">${recordsStatusLabel(k)}</button>`;
+      }).join('')}
+    </div>
+    <div class="text-[10px] text-mess-400 mt-1 mb-2 px-0.5">${bookings.length} record${bookings.length===1?'':'s'} found</div>
+  </div>
+  <div class="px-4 lg:px-6 pb-6 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">${rows}</div>`;
+}
+function onRecordsSearch(v){ state.recordsSearch = v; render(); const el=document.querySelector('#app-content input[type=text]'); if(el){ el.focus(); el.selectionStart = el.selectionEnd = el.value.length; } }
+function clearRecordsSearch(){ state.recordsSearch = ''; render(); }
+function setRecordsStatusFilter(k){ state.recordsStatusFilter = k; render(); }
+
+function renderAdmin(){
+  if(!isAdmin(state.role)){
+    return `<div class="px-4 pt-10 text-center text-sm text-mess-400">Admin access required. Switch to Mess Secretary or PMC.</div>`;
+  }
+  const blocks = DB.blocks.map(b=>{
+    const rooms = roomsForBlock(b.id);
+    const availableCount = rooms.filter(r=>r.status==='available').length;
+    return `
+    <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-3">
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <div class="font-display font-semibold text-mess-900">${b.name}</div>
+          <div class="text-[11px] text-mess-500">${availableCount}/${rooms.length} rooms available &middot; prefix ${b.prefix}</div>
+        </div>
+        <label class="flex items-center gap-1.5 text-[11px] text-mess-600">
+          <input type="checkbox" ${b.active?'checked':''} onchange="toggleBlockActive('${b.id}', this.checked)">
+          Active
+        </label>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="openRoomModal(null, '${b.id}')" class="text-xs font-semibold bg-mess-50 text-mess-700 px-3 py-1.5 rounded-lg border border-mess-200">+ Add room</button>
+        <button onclick="toggleRoomListView('${b.id}')" class="text-xs font-semibold text-mess-500 ml-auto">Manage rooms &rsaquo;</button>
+      </div>
+      <div id="roomlist_${b.id}" class="hidden mt-3 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5 max-h-56 overflow-y-auto">
+        ${rooms.map(r=>{
+          const tc = ROOM_TYPE_COLORS[r.type];
+          const isMaint = r.status==='maintenance';
+          return `
+          <button onclick="openRoomModal('${r.id}')" class="text-[10px] font-mono-num rounded-lg px-1.5 py-1.5 border text-center ${isMaint?'border-dashed opacity-60':''}"
+            style="background:${tc.bg}; color:${tc.text}; border-color:${isMaint?'#C4453C':tc.text+'55'};">
+            ${r.type==='vip'?(r.name||roomFullNumber(r)):roomFullNumber(r)}${isMaint?' &#9888;':''}
+          </button>`;
+        }).join('') || '<div class="col-span-3 text-xs text-mess-400 py-2 text-center">No rooms yet.</div>'}
+      </div>
+    </div>`;
+  }).join('');
+
+  const audit = DB.auditLog.slice(0,25).map(a=>`
+    <div class="flex items-start gap-2 py-1.5 border-b border-mess-50 last:border-0">
+      <div class="text-[10px] text-mess-400 font-mono-num w-12 shrink-0 pt-0.5">${new Date(a.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>
+      <div class="text-[11px] text-mess-700 flex-1"><span class="font-semibold">${a.role}</span> — ${a.detail}</div>
+    </div>`).join('') || '<div class="text-xs text-mess-400">No activity logged yet.</div>';
+
+  return `
+  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-6">
+    <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-3">Blocks &amp; Rooms</div>
+    <div class="lg:grid lg:grid-cols-3 lg:gap-5 lg:items-start">
+      <div class="lg:col-span-2">
+        ${blocks}
+      </div>
+      <div>
+        <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-3">
+          <div class="font-display font-semibold text-mess-900 mb-2">Add new block</div>
+          <div class="grid grid-cols-2 gap-2 mb-2">
+            <input id="newBlockName" placeholder="Block name" class="border border-mess-200 rounded-lg px-3 py-2 text-sm">
+            <input id="newBlockPrefix" placeholder="Prefix e.g. GB" maxlength="4" class="border border-mess-200 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div class="grid grid-cols-2 gap-2 mb-2">
+            <input id="newBlockCount" type="number" min="1" placeholder="Room count" class="border border-mess-200 rounded-lg px-3 py-2 text-sm">
+            <select id="newBlockType" class="border border-mess-200 rounded-lg px-2 py-2 text-sm bg-white">
+              <option value="td">TD Room</option>
+              <option value="livingin">Living-in Room</option>
+              <option value="vip">VIP Suite</option>
+            </select>
+          </div>
+          <div class="text-[10px] text-mess-400 -mt-1 mb-2 px-0.5">All rooms created for this block start as this Type — edit individually afterwards if needed.</div>
+          <button onclick="addBlock()" class="w-full py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold">Add block</button>
+        </div>
+
+        <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-6">
+          <div class="font-display font-semibold text-mess-900 mb-2">Audit trail</div>
+          <div class="max-h-64 overflow-y-auto">${audit}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function toggleRoomListView(blockId){ document.getElementById('roomlist_'+blockId).classList.toggle('hidden'); }
+function toggleBlockActive(id, val){
+  const b = getBlock(id); b.active = val;
+  persistBlock(b);
+  logAudit('block_toggled', `${b.name} → ${val?'active':'inactive'}`);
+  render();
+}
+
+/* =========================================================================
+   ROOM MODAL (Admin: add a new room, or edit an existing one)
+   ========================================================================= */
+function openRoomModal(roomId, presetBlockId){
+  const form = document.getElementById('roomForm');
+  form.reset();
+  document.getElementById('roomFormError').classList.add('hidden');
+
+  const blockSel = document.getElementById('rf_blockId');
+  blockSel.innerHTML = DB.blocks.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+
+  const room = roomId ? getRoom(roomId) : null;
+  form.dataset.editingId = roomId || '';
+
+  if(room){
+    document.getElementById('roomModalTitle').textContent = 'Edit room';
+    document.getElementById('roomSubmitBtn').textContent = 'Save changes';
+    document.getElementById('rf_roomNo').value = room.roomNo;
+    blockSel.value = room.blockId;
+    document.getElementById('rf_type').value = room.type;
+    document.getElementById('rf_suiteName').value = room.name || '';
+    document.getElementById('rf_status').value = room.status;
+  } else {
+    document.getElementById('roomModalTitle').textContent = 'Add room';
+    document.getElementById('roomSubmitBtn').textContent = 'Save room';
+    document.getElementById('rf_roomNo').value = '';
+    if(presetBlockId) blockSel.value = presetBlockId;
+    document.getElementById('rf_type').value = 'td';
+    document.getElementById('rf_suiteName').value = '';
+    document.getElementById('rf_status').value = 'available';
+  }
+  onRoomTypeChange();
+  document.getElementById('roomModal').classList.remove('hidden');
+}
+function closeRoomModal(){ document.getElementById('roomModal').classList.add('hidden'); }
+function onRoomTypeChange(){
+  const isVip = document.getElementById('rf_type').value === 'vip';
+  document.getElementById('rf_suiteNameWrap').classList.toggle('hidden', !isVip);
+}
+function saveRoom(ev){
+  ev.preventDefault();
+  const form = document.getElementById('roomForm');
+  const editingId = form.dataset.editingId || null;
+  const errBox = document.getElementById('roomFormError');
+  errBox.classList.add('hidden');
+
+  const roomNo = document.getElementById('rf_roomNo').value.trim();
+  const blockId = document.getElementById('rf_blockId').value;
+  const type = document.getElementById('rf_type').value;
+  const status = document.getElementById('rf_status').value;
+  const suiteName = document.getElementById('rf_suiteName').value.trim();
+
+  if(!roomNo || !blockId){
+    errBox.textContent = 'Room No. and Block are required.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+  const dupe = DB.rooms.find(r => r.blockId===blockId && r.roomNo===roomNo && r.id!==editingId);
+  if(dupe){
+    errBox.textContent = 'This Room No. already exists in that block.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  if(editingId){
+    const room = getRoom(editingId);
+    Object.assign(room, { roomNo, blockId, type, status, name: type==='vip' ? (suiteName || room.name || null) : null });
+    persistRoom(room);
+    logAudit('room_edited', `${roomLabel(room)} updated`);
+    closeRoomModal(); render();
+    showToast('Room updated');
+  } else {
+    const room = { id: uid('room'), blockId, roomNo, type, status, name: type==='vip' ? (suiteName || null) : null };
+    DB.rooms.push(room);
+    persistRoom(room);
+    const block = getBlock(blockId);
+    if(block){ block.count = roomsForBlock(blockId).length; persistBlock(block); }
+    logAudit('room_added', `${roomLabel(room)} added to ${block ? block.name : blockId}`);
+    closeRoomModal(); render();
+    showToast('Room added');
+  }
+}
+
+function addBlock(){
+  const name = document.getElementById('newBlockName').value.trim();
+  const prefix = document.getElementById('newBlockPrefix').value.trim().toUpperCase();
+  const count = parseInt(document.getElementById('newBlockCount').value || '0', 10);
+  const type = document.getElementById('newBlockType').value;
+  if(!name || !prefix || !count){ showToast('Fill all block fields', 'error'); return; }
+  const block = { id: uid('block'), name, prefix, count, vip: type==='vip', active:true, order: DB.blocks.length+1 };
+  DB.blocks.push(block);
+  persistBlock(block);
+  const rooms = buildRoomsForBlock(block);
+  if(type!=='vip'){ rooms.forEach(r=>{ r.type = type; }); }
+  DB.rooms = DB.rooms.concat(rooms);
+  rooms.forEach(persistRoom);
+  logAudit('block_added', `${name} (${count} rooms)`);
+  render();
+  showToast('Block added');
+}
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+document.getElementById('roleLabel').textContent = state.role;
+render();
+
+/* Registers the service worker so the app is installable as a standalone,
+   full-screen app icon (see manifest.webmanifest + apple meta tags in
+   <head>). Registration failure (e.g. unsupported browser) is silent and
+   non-blocking — the app works fully without it, just without an install
+   prompt / offline shell. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((err) => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
+</body>
+</html>
