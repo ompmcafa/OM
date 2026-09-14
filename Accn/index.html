@@ -94,10 +94,27 @@
           <div class="text-[10px] text-mess-200 -mt-0.5">Officers Mess &middot; Bookings</div>
         </div>
       </div>
+      <div class="flex items-center gap-2 shrink-0">
       <button onclick="openRoleSheet()" id="roleBtn" class="flex items-center gap-1.5 bg-mess-700/70 hover:bg-mess-700 border border-mess-600 rounded-full pl-2 pr-1 py-1 text-xs">
         <span id="roleLabel" class="font-medium"></span>
         <span class="w-5 h-5 rounded-full bg-brass-500 text-white flex items-center justify-center text-[10px]">▾</span>
       </button>
+      <div class="relative" id="appMenuWrap">
+        <button type="button" id="appMenuBtn" onclick="toggleAppMenu(event)" aria-label="Menu" aria-haspopup="true"
+          class="hidden w-9 h-9 rounded-full bg-mess-700 text-white shrink-0"
+          style="padding:0;margin:0;line-height:0;border:none;align-items:center;justify-content:center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="display:block">
+            <rect x="3" y="3.5" width="10" height="1.6" rx="0.8"/>
+            <rect x="3" y="7.2" width="10" height="1.6" rx="0.8"/>
+            <rect x="3" y="10.9" width="10" height="1.6" rx="0.8"/>
+          </svg>
+        </button>
+        <div id="appMenuDropdown" class="hidden absolute right-0 top-full mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-mess-100 py-1 z-50">
+          <button type="button" onclick="openManageRooms()" class="w-full text-left px-3 py-2.5 text-sm text-mess-800 hover:bg-mess-50">Manage Rooms</button>
+          <button type="button" onclick="openManageOrderlies()" class="w-full text-left px-3 py-2.5 text-sm text-mess-800 hover:bg-mess-50">Manage Orderly Details</button>
+        </div>
+      </div>
+      </div>
     </div>
   </header>
 
@@ -135,6 +152,30 @@
       <div id="roleList" class="space-y-1"></div>
       <div id="roleSheetAccount" class="mt-3 pt-3 border-t border-mess-100 flex items-center justify-between px-1"></div>
       <button onclick="handleLogout()" class="w-full mt-2 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-semibold">Log out</button>
+    </div>
+  </div>
+
+  <!-- ===================== MANAGE ROOMS ===================== -->
+  <div id="manageRoomsModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeManageRooms()"></div>
+    <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl safe-bottom max-h-[95vh] overflow-y-auto">
+      <div class="sticky top-0 bg-white px-4 pt-3 pb-2 border-b border-mess-100 flex items-center justify-between z-10">
+        <div class="font-display uppercase text-sm font-semibold text-mess-800">Manage Rooms</div>
+        <button type="button" onclick="closeManageRooms()" class="w-8 h-8 rounded-full bg-mess-50 text-mess-700 flex items-center justify-center">✕</button>
+      </div>
+      <div id="manageRoomsBody" class="p-4"></div>
+    </div>
+  </div>
+
+  <!-- ===================== MANAGE ORDERLIES ===================== -->
+  <div id="manageOrderliesModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-black/40 modal-backdrop" onclick="closeManageOrderlies()"></div>
+    <div class="absolute bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white rounded-t-2xl safe-bottom max-h-[95vh] overflow-y-auto">
+      <div class="sticky top-0 bg-white px-4 pt-3 pb-2 border-b border-mess-100 flex items-center justify-between z-10">
+        <div class="font-display uppercase text-sm font-semibold text-mess-800">Manage Orderly Details</div>
+        <button type="button" onclick="closeManageOrderlies()" class="w-8 h-8 rounded-full bg-mess-50 text-mess-700 flex items-center justify-center">✕</button>
+      </div>
+      <div id="manageOrderliesBody" class="p-4"></div>
     </div>
   </div>
 
@@ -351,7 +392,8 @@
     setPersistence, browserLocalPersistence
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
   import {
-    getFirestore, collection, collectionGroup, doc, setDoc, updateDoc, writeBatch, onSnapshot, enableIndexedDbPersistence
+    initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore,
+    collection, collectionGroup, doc, setDoc, updateDoc, writeBatch, onSnapshot
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -366,12 +408,14 @@
 
   const fbApp = initializeApp(firebaseConfig);
   const auth = getAuth(fbApp);
-  const fsDb = getFirestore(fbApp);
-  enableIndexedDbPersistence(fsDb).catch((err) => {
-    // Fails silently in multi-tab scenarios or unsupported browsers — the
-    // app still works fully online, it just won't cache offline.
-    console.warn('Firestore offline persistence not enabled:', err && err.code);
-  });
+  let fsDb;
+  try{
+    fsDb = initializeFirestore(fbApp, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  }catch(e){
+    fsDb = getFirestore(fbApp);
+  }
 
   window.firebaseLogin = async function(username, password){
     await setPersistence(auth, browserLocalPersistence);
@@ -525,6 +569,9 @@ function friendlyAuthError(err){
 }
 function handleLogout(){
   closeRoleSheet();
+  if(typeof closeAppMenu === 'function') closeAppMenu();
+  if(typeof closeManageRooms === 'function') closeManageRooms();
+  if(typeof closeManageOrderlies === 'function') closeManageOrderlies();
   if(window.firebaseLogout) window.firebaseLogout();
 }
 /* Called by the Firebase module script whenever auth state changes
@@ -1022,6 +1069,8 @@ const MODAL_CLOSE = {
   waModal: () => closeWaModal(),
   roomModal: () => closeRoomModal(),
   roleSheet: () => closeRoleSheet(),
+  manageRoomsModal: () => closeManageRooms(),
+  manageOrderliesModal: () => closeManageOrderlies(),
 };
 function openModals(){
   return Object.keys(MODAL_CLOSE).map(id => document.getElementById(id)).filter(el => el && !el.classList.contains('hidden'));
@@ -1045,6 +1094,12 @@ function focusModal(id){
   });
 }
 document.addEventListener('keydown', (e) => {
+  const menu = document.getElementById('appMenuDropdown');
+  if(e.key === 'Escape' && menu && !menu.classList.contains('hidden')){
+    e.preventDefault();
+    closeAppMenu();
+    return;
+  }
   const open = openModals();
   if(!open.length) return;
   const modal = open[open.length-1];
@@ -1082,6 +1137,7 @@ function usernameForRole(role){
   return Object.keys(USERNAME_ROLE_MAP).find(u => USERNAME_ROLE_MAP[u] === role) || null;
 }
 function openRoleSheet(){
+  closeAppMenu();
   document.getElementById('roleSheetContent').innerHTML = baseRoleSheetHTML();
   const list = document.getElementById('roleList');
   list.innerHTML = ROLES.map(r => `
@@ -1163,13 +1219,19 @@ const TABS = [
   { id:'movement',   label:'Movement',  icon:'&#8644;' },
   { id:'requests',   label:'Requests',  icon:'&#9993;' },
   { id:'records',    label:'Records',   icon:'&#9776;' },
-  { id:'admin',      label:'Admin',     icon:'&#9881;' },
+  { id:'admin',      label:'Logs',      icon:'&#128196;' },
 ];
 function pendingRequestCount(){
   return (DB.guestRequests||[]).filter(r=>r.status==='pending').length;
 }
 function renderChrome(){
   document.getElementById('roleLabel').textContent = state.role;
+  const menuBtn = document.getElementById('appMenuBtn');
+  if(menuBtn){
+    const show = isAdmin(state.role);
+    menuBtn.classList.toggle('hidden', !show);
+    menuBtn.style.display = show ? 'inline-flex' : 'none';
+  }
   const tabs = TABS.filter(t => (t.id!=='admin' && t.id!=='requests') || isAdmin(state.role));
 
   const pendingN = pendingRequestCount();
@@ -1219,6 +1281,7 @@ function scrollContentToTop(){
 function setTab(id){
   state.tab = id;
   if(id==='gantt') resetGanttWindow();
+  closeAppMenu();
   render();
   scrollContentToTop();
 }
@@ -1253,7 +1316,7 @@ function render(){
   else if(state.tab==='movement') c.innerHTML = renderMovement();
   else if(state.tab==='requests') c.innerHTML = renderRequests();
   else if(state.tab==='records') c.innerHTML = renderRecords();
-  else if(state.tab==='admin') c.innerHTML = renderAdmin();
+  else if(state.tab==='admin') c.innerHTML = renderLogs();
   if(state.tab==='gantt') attachGanttScrollSync();
 }
 
@@ -3031,33 +3094,80 @@ function renderRecords(){
 function onRecordsSearch(v){ state.recordsSearch = v; render(); const el=document.querySelector('#app-content input[type=text]'); if(el){ el.focus(); el.selectionStart = el.selectionEnd = el.value.length; } }
 function clearRecordsSearch(){ state.recordsSearch = ''; render(); }
 function setRecordsStatusFilter(k){ state.recordsStatusFilter = k; render(); }
+function filteredAuditEntries(){
+  const q = (state.auditSearch || '').trim().toLowerCase();
+  const items = (DB.auditLog || []).slice().sort((a,c)=>(c.ts||'').localeCompare(a.ts||''));
+  const matched = q
+    ? items.filter(a => `${a.detail || ''} ${a.role || ''}`.toLowerCase().includes(q))
+    : items;
+  return matched.slice(0, q ? 200 : 100);
+}
+function auditListHTML(){
+  const items = filteredAuditEntries();
+  if(!items.length){
+    return `<div class="text-xs text-mess-400 py-6 text-center">${(state.auditSearch||'').trim() ? 'No matching activity.' : 'No activity logged yet.'}</div>`;
+  }
+  let lastDay = null;
+  return items.map(a=>{
+    const when = new Date(a.ts);
+    const day = isNaN(when) ? 'Unknown date' : when.toLocaleDateString('en-GB',{weekday:'short', day:'2-digit', month:'short', year:'numeric'});
+    const time = isNaN(when) ? '' : when.toLocaleTimeString('en-GB',{hour:'2-digit', minute:'2-digit', hour12:false});
+    const heading = day !== lastDay
+      ? `<div class="text-[10px] font-semibold text-mess-500 uppercase tracking-wide mt-3 mb-1">${escapeHtml(day)}</div>`
+      : '';
+    lastDay = day;
+    return `${heading}
+    <div class="flex items-start gap-2 py-1.5 border-b border-mess-50 last:border-0">
+      <div class="text-[10px] text-mess-400 font-mono-num w-12 shrink-0 pt-0.5">${time}</div>
+      <div class="text-[11px] text-mess-700 flex-1 min-w-0">${escapeHtml(a.detail||'')}</div>
+    </div>`;
+  }).join('');
+}
 function onAuditSearch(v){
   state.auditSearch = v;
-  const input = document.getElementById('auditSearchInput');
   const list = document.getElementById('auditTrailList');
-  if(list){
-    const q = (v || '').trim().toLowerCase();
-    const source = (DB.auditLog || []).filter(a => {
-      if(!q) return true;
-      return `${a.detail || ''} ${a.role || ''}`.toLowerCase().includes(q);
-    }).slice(0, q ? 80 : 40);
-    list.innerHTML = source.map(a=>{
-      const when = new Date(a.ts);
-      const time = isNaN(when) ? '' : when.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-      return `<div class="flex items-start gap-2 py-1.5 border-b border-mess-50 last:border-0"><div class="text-[10px] text-mess-400 font-mono-num w-16 shrink-0 pt-0.5">${time}</div><div class="text-[11px] text-mess-700 flex-1">${escapeHtml(a.detail||'')}</div></div>`;
-    }).join('') || `<div class="text-xs text-mess-400">${q ? 'No matching activity.' : 'No activity logged yet.'}</div>`;
-  }
-  if(input && document.activeElement === input) return;
+  if(list) list.innerHTML = auditListHTML();
 }
 function clearAuditSearch(){
   state.auditSearch = '';
   render();
 }
 
-function renderAdmin(){
+function renderLogs(){
   if(!isAdmin(state.role)){
-    return `<div class="px-4 pt-10 text-center text-sm text-mess-400">Admin access required. Switch to Mess Secretary or PMC.</div>`;
+    return `<div class="px-4 pt-10 text-center text-sm text-mess-400">Logs access required. Switch to Mess Secretary, PMC, or Accommodation Member.</div>`;
   }
+  const n = filteredAuditEntries().length;
+  return `
+  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-6">
+    <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-1">Logs</div>
+    <div class="text-[11px] text-mess-400 mb-3">Latest first${(state.auditSearch||'').trim()?'':' · last '+n+' entries'}</div>
+    <div class="relative mb-3 lg:max-w-md">
+      <input id="auditSearchInput" type="text" value="${escapeHtml(state.auditSearch)}" placeholder="Search name, room, cancelled, approved…"
+        oninput="onAuditSearch(this.value)"
+        class="w-full border border-mess-200 rounded-lg pl-3 ${state.auditSearch?'pr-8':'pr-3'} py-2 text-sm bg-white">
+      ${state.auditSearch ? `<button type="button" onclick="clearAuditSearch()" aria-label="Clear search" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-mess-100 text-mess-500 flex items-center justify-center text-xs leading-none">✕</button>` : ''}
+    </div>
+    <div id="auditTrailList" class="bg-white border border-mess-100 rounded-2xl px-3 pb-2 overflow-y-auto" style="max-height:calc(100vh - 14rem)">${auditListHTML()}</div>
+  </div>`;
+}
+
+function toggleAppMenu(ev){
+  if(ev) ev.stopPropagation();
+  const dd = document.getElementById('appMenuDropdown');
+  if(!dd) return;
+  dd.classList.toggle('hidden');
+}
+function closeAppMenu(){
+  const dd = document.getElementById('appMenuDropdown');
+  if(dd) dd.classList.add('hidden');
+}
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('appMenuWrap');
+  if(wrap && !wrap.contains(e.target)) closeAppMenu();
+});
+
+function manageRoomsHTML(){
   const blocks = DB.blocks.map(b=>{
     const rooms = roomsForBlock(b.id);
     const availableCount = rooms.filter(r=>r.status==='available').length;
@@ -3065,110 +3175,104 @@ function renderAdmin(){
     <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-3">
       <div class="flex items-center justify-between mb-2">
         <div>
-          <div class="font-display font-semibold text-mess-900">${b.name}</div>
-          <div class="text-[11px] text-mess-500">${availableCount}/${rooms.length} rooms available &middot; prefix ${b.prefix}</div>
+          <div class="font-display font-semibold text-mess-900">${escapeHtml(b.name)}</div>
+          <div class="text-[11px] text-mess-500">${availableCount}/${rooms.length} rooms available &middot; prefix ${escapeHtml(b.prefix)}</div>
         </div>
         <label class="flex items-center gap-1.5 text-[11px] text-mess-600">
           <input type="checkbox" ${b.active?'checked':''} onchange="toggleBlockActive('${b.id}', this.checked)">
           Active
         </label>
       </div>
-      <div class="flex items-center gap-2">
-        <button onclick="openRoomModal(null, '${b.id}')" class="text-xs font-semibold bg-mess-50 text-mess-700 px-3 py-1.5 rounded-lg border border-mess-200">+ Add room</button>
-        <button onclick="toggleRoomListView('${b.id}')" class="text-xs font-semibold text-mess-500 ml-auto">Manage rooms &rsaquo;</button>
+      <div class="flex items-center gap-2 mb-2">
+        <button type="button" onclick="openRoomModal(null, '${b.id}')" class="text-xs font-semibold bg-mess-50 text-mess-700 px-3 py-1.5 rounded-lg border border-mess-200">+ Add room</button>
       </div>
-      <div id="roomlist_${b.id}" class="hidden mt-3 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5 max-h-56 overflow-y-auto">
+      <div class="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-56 overflow-y-auto">
         ${rooms.map(r=>{
           const tc = ROOM_TYPE_COLORS[r.type];
           const isMaint = r.status==='maintenance';
           return `
-          <button onclick="openRoomModal('${r.id}')" class="text-[10px] font-mono-num rounded-lg px-1.5 py-1.5 border text-center ${isMaint?'border-dashed opacity-60':''}"
+          <button type="button" onclick="openRoomModal('${r.id}')" class="text-[10px] font-mono-num rounded-lg px-1.5 py-1.5 border text-center ${isMaint?'border-dashed opacity-60':''}"
             style="background:${tc.bg}; color:${tc.text}; border-color:${isMaint?'#C4453C':tc.text+'55'};">
-            ${r.type==='vip'?(r.name||roomFullNumber(r)):roomFullNumber(r)}${isMaint?' &#9888;':''}
+            ${escapeHtml(r.type==='vip'?(r.name||roomFullNumber(r)):roomFullNumber(r))}${isMaint?' &#9888;':''}
           </button>`;
         }).join('') || '<div class="col-span-3 text-xs text-mess-400 py-2 text-center">No rooms yet.</div>'}
       </div>
     </div>`;
   }).join('');
-
-  const auditQ = (state.auditSearch || '').trim().toLowerCase();
-  const auditSource = (DB.auditLog || []).filter(a => {
-    if(!auditQ) return true;
-    const hay = `${a.detail || ''} ${a.role || ''}`.toLowerCase();
-    return hay.includes(auditQ);
-  });
-  const auditSlice = auditSource.slice(0, auditQ ? 80 : 40);
-  const audit = auditSlice.map(a=>{
-    const when = new Date(a.ts);
-    const time = isNaN(when) ? '' : when.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-    return `
-    <div class="flex items-start gap-2 py-1.5 border-b border-mess-50 last:border-0">
-      <div class="text-[10px] text-mess-400 font-mono-num w-16 shrink-0 pt-0.5">${time}</div>
-      <div class="text-[11px] text-mess-700 flex-1">${escapeHtml(a.detail||'')}</div>
-    </div>`;
-  }).join('') || `<div class="text-xs text-mess-400">${auditQ ? 'No matching activity.' : 'No activity logged yet.'}</div>`;
-
   return `
-  <div class="px-4 lg:px-6 pt-4 lg:pt-6 pb-6">
-    <div class="font-display uppercase text-sm font-semibold text-mess-800 mb-3">Blocks &amp; Rooms</div>
-    <div class="lg:grid lg:grid-cols-3 lg:gap-5 lg:items-start">
-      <div class="lg:col-span-2">
-        ${blocks}
+    <div class="font-display font-semibold text-mess-900 mb-2">Blocks &amp; rooms</div>
+    ${blocks}
+    <div class="bg-mess-50 border border-mess-100 rounded-2xl p-4 mt-1">
+      <div class="font-display font-semibold text-mess-900 mb-2">Add new block</div>
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <input id="newBlockName" placeholder="Block name" class="min-w-0 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white">
+        <input id="newBlockPrefix" placeholder="Prefix e.g. GB" maxlength="4" class="min-w-0 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white">
       </div>
-      <div class="min-w-0">
-          <div class="grid grid-cols-2 gap-2 mb-2">
-            <input id="newBlockName" placeholder="Block name" class="border border-mess-200 rounded-lg px-3 py-2 text-sm">
-            <input id="newBlockPrefix" placeholder="Prefix e.g. GB" maxlength="4" class="border border-mess-200 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div class="grid grid-cols-2 gap-2 mb-2">
-            <input id="newBlockCount" type="number" min="1" placeholder="Room count" class="border border-mess-200 rounded-lg px-3 py-2 text-sm">
-            <select id="newBlockType" class="border border-mess-200 rounded-lg px-2 py-2 text-sm bg-white">
-              <option value="td">TD Room</option>
-              <option value="livingin">Living-in Room</option>
-              <option value="vip">VIP Suite</option>
-            </select>
-          </div>
-          <div class="text-[10px] text-mess-400 -mt-1 mb-2 px-0.5">All rooms created for this block start as this Type — edit individually afterwards if needed.</div>
-          <button onclick="addBlock()" class="w-full py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold">Add block</button>
-        </div>
-
-        <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-3">
-          <div class="font-display font-semibold text-mess-900 mb-2">Reception orderlies</div>
-          <div class="text-[10px] text-mess-400 mb-2">Used in WhatsApp intimation messages.</div>
-          <div id="orderlyList" class="space-y-2 mb-2">
-            ${receptionOrderlies().map((o,i)=>`
-              <div class="orderly-row space-y-1.5">
-                <input class="ol-name w-full min-w-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Name" value="${escapeHtml(o.name||'')}">
-                <div class="flex gap-1 min-w-0">
-                  <input class="ol-phone min-w-0 flex-1 border border-mess-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Phone" value="${escapeHtml(o.phone||'')}">
-                  <button type="button" onclick="this.closest('.orderly-row').remove()" class="shrink-0 w-8 h-8 rounded-lg text-red-500 text-xs">✕</button>
-                </div>
-              </div>`).join('')}
-          </div>
-          <button type="button" onclick="addOrderlyRow()" class="w-full mb-2 py-1.5 rounded-lg border border-dashed border-mess-300 text-mess-600 text-xs font-semibold">+ Add contact</button>
-          <button type="button" onclick="saveReceptionOrderlies()" class="w-full py-2 rounded-xl bg-mess-700 text-white text-sm font-semibold">Save contacts</button>
-        </div>
-
-        <div class="bg-white border border-mess-100 rounded-2xl p-4 mb-6">
-          <div class="font-display font-semibold text-mess-900 mb-2">Audit trail</div>
-          <div class="relative mb-2">
-            <input id="auditSearchInput" type="text" value="${escapeHtml(state.auditSearch)}" placeholder="Search name, room, cancelled, approved…"
-              oninput="onAuditSearch(this.value)"
-              class="w-full border border-mess-200 rounded-lg pl-3 ${state.auditSearch?'pr-8':'pr-3'} py-1.5 text-sm bg-white">
-            ${state.auditSearch ? `<button type="button" onclick="clearAuditSearch()" aria-label="Clear search" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-mess-100 text-mess-500 flex items-center justify-center text-xs leading-none">✕</button>` : ''}
-          </div>
-          <div id="auditTrailList" class="max-h-64 overflow-y-auto">${audit}</div>
-        </div>
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <input id="newBlockCount" type="number" min="1" placeholder="Room count" class="min-w-0 border border-mess-200 rounded-lg px-3 py-2 text-sm bg-white">
+        <select id="newBlockType" class="min-w-0 border border-mess-200 rounded-lg px-2 py-2 text-sm bg-white">
+          <option value="td">TD Room</option>
+          <option value="livingin">Living-in Room</option>
+          <option value="vip">VIP Suite</option>
+        </select>
       </div>
-    </div>
-  </div>`;
+      <div class="text-[10px] text-mess-400 -mt-1 mb-2">All rooms created for this block start as this Type — edit individually afterwards if needed.</div>
+      <button type="button" onclick="addBlock()" class="w-full py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold">Add block</button>
+    </div>`;
 }
+function manageOrderliesHTML(){
+  return `
+    <div class="text-[11px] text-mess-400 mb-3">These numbers appear in WhatsApp intimation messages and on confirmed guest requests.</div>
+    <div id="orderlyList" class="space-y-3 mb-3">
+      ${receptionOrderlies().map(o=>`
+        <div class="orderly-row space-y-1.5 bg-mess-50 border border-mess-100 rounded-xl p-3">
+          <input class="ol-name w-full min-w-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Name" value="${escapeHtml(o.name||'')}">
+          <div class="flex gap-1 min-w-0">
+            <input class="ol-phone min-w-0 flex-1 border border-mess-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Phone" value="${escapeHtml(o.phone||'')}">
+            <button type="button" onclick="this.closest('.orderly-row').remove()" class="shrink-0 w-8 h-8 rounded-lg text-red-500 text-xs">✕</button>
+          </div>
+        </div>`).join('')}
+    </div>
+    <button type="button" onclick="addOrderlyRow()" class="w-full mb-2 py-1.5 rounded-lg border border-dashed border-mess-300 text-mess-600 text-xs font-semibold">+ Add contact</button>
+    <button type="button" onclick="saveReceptionOrderlies()" class="w-full py-2.5 rounded-xl bg-mess-700 text-white text-sm font-semibold">Save contacts</button>`;
+}
+function fillManageRoomsModal(){
+  const body = document.getElementById('manageRoomsBody');
+  if(body) body.innerHTML = manageRoomsHTML();
+}
+function fillManageOrderliesModal(){
+  const body = document.getElementById('manageOrderliesBody');
+  if(body) body.innerHTML = manageOrderliesHTML();
+}
+function openManageRooms(){
+  if(!isAdmin(state.role)) return;
+  closeAppMenu();
+  fillManageRoomsModal();
+  document.getElementById('manageRoomsModal').classList.remove('hidden');
+  focusModal('manageRoomsModal');
+}
+function closeManageRooms(){
+  const el = document.getElementById('manageRoomsModal');
+  if(el) el.classList.add('hidden');
+}
+function openManageOrderlies(){
+  if(!isAdmin(state.role)) return;
+  closeAppMenu();
+  fillManageOrderliesModal();
+  document.getElementById('manageOrderliesModal').classList.remove('hidden');
+  focusModal('manageOrderliesModal');
+}
+function closeManageOrderlies(){
+  const el = document.getElementById('manageOrderliesModal');
+  if(el) el.classList.add('hidden');
+}
+
 function addOrderlyRow(){
   const list = document.getElementById('orderlyList');
   if(!list) return;
   const row = document.createElement('div');
-  row.className = 'orderly-row space-y-1.5';
-  row.innerHTML = `<input class="ol-name w-full min-w-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Name"><div class="flex gap-1 min-w-0"><input class="ol-phone min-w-0 flex-1 border border-mess-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Phone"><button type="button" onclick="this.closest('.orderly-row').remove()" class="shrink-0 w-8 h-8 rounded-lg text-red-500 text-xs">✕</button></div>`;
+  row.className = 'orderly-row space-y-1.5 bg-mess-50 border border-mess-100 rounded-xl p-3';
+  row.innerHTML = `<input class="ol-name w-full min-w-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Name"><div class="flex gap-1 min-w-0"><input class="ol-phone min-w-0 flex-1 border border-mess-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Phone"><button type="button" onclick="this.closest('.orderly-row').remove()" class="shrink-0 w-8 h-8 rounded-lg text-red-500 text-xs">✕</button></div>`;
   list.appendChild(row);
 }
 function saveReceptionOrderlies(){
@@ -3192,6 +3296,8 @@ function toggleBlockActive(id, val){
   persistBlock(b);
   logAudit(`${val ? 'activated' : 'deactivated'} block ${b.name}`);
   render();
+  const roomsModal = document.getElementById('manageRoomsModal');
+  if(roomsModal && !roomsModal.classList.contains('hidden')) fillManageRoomsModal();
 }
 
 /* =========================================================================
@@ -3265,6 +3371,8 @@ function saveRoom(ev){
     persistRoom(room);
     logAudit(`updated room ${roomLabel(room)} (${type}${status==='maintenance' ? ', on maintenance' : ''})`);
     closeRoomModal(); render();
+    const roomsModal = document.getElementById('manageRoomsModal');
+    if(roomsModal && !roomsModal.classList.contains('hidden')) fillManageRoomsModal();
     showToast('Room updated');
   } else {
     const room = { id: uid('room'), blockId, roomNo, type, status, name: type==='vip' ? (suiteName || null) : null };
@@ -3274,6 +3382,8 @@ function saveRoom(ev){
     if(block){ block.count = roomsForBlock(blockId).length; persistBlock(block); }
     logAudit(`added room ${roomLabel(room)} to ${block ? block.name : blockId}`);
     closeRoomModal(); render();
+    const roomsModalAdd = document.getElementById('manageRoomsModal');
+    if(roomsModalAdd && !roomsModalAdd.classList.contains('hidden')) fillManageRoomsModal();
     showToast('Room added');
   }
 }
@@ -3293,6 +3403,8 @@ function addBlock(){
   rooms.forEach(persistRoom);
   logAudit(`added block ${name} with ${count} rooms`);
   render();
+  const roomsModal = document.getElementById('manageRoomsModal');
+  if(roomsModal && !roomsModal.classList.contains('hidden')) fillManageRoomsModal();
   showToast('Block added');
 }
 
@@ -3307,11 +3419,9 @@ render();
    <head>). Registration failure (e.g. unsupported browser) is silent and
    non-blocking — the app works fully without it, just without an install
    prompt / offline shell. */
-if('serviceWorker' in navigator){
+if('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')){
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch((err) => {
-      console.warn('Service worker registration failed:', err);
-    });
+    navigator.serviceWorker.register('sw.js').catch(() => {});
   });
 }
 </script>
