@@ -4,7 +4,7 @@
    static app shell for a fast, resilient launch. It deliberately does NOT
    cache Firestore/Firebase network calls — booking data always comes from
    the network so the app never shows stale room/booking state. */
-const SHELL_CACHE = 'am-shell-v4';
+const SHELL_CACHE = 'am-shell-v15';
 const SHELL_FILES = [
   './',
   './index.html',

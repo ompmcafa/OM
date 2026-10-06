@@ -43,7 +43,7 @@
 <div id="loginScreen" class="fixed inset-0 z-[100] bg-mess-800 flex items-center justify-center px-6 safe-top safe-bottom">
   <div class="w-full max-w-sm bg-white rounded-2xl p-6 shadow-xl">
     <div class="flex flex-col items-center mb-5">
-      <div class="w-12 h-12 rounded-full bg-brass-500 flex items-center justify-center font-display font-bold text-white text-lg mb-2">AM</div>
+      <img src="icon-192.png" alt="Accommodation Manager" class="rounded-xl bg-white mb-2" style="width:3.5rem;height:3.5rem;object-fit:contain">
       <div class="font-display uppercase tracking-wide text-base font-semibold text-mess-800">Accommodation Manager</div>
       <div class="text-[11px] text-mess-500">Officers Mess &middot; Sign in</div>
     </div>
@@ -88,10 +88,9 @@
   <header class="safe-top shrink-0 z-40 bg-mess-800 text-white shadow-md">
     <div class="flex items-center justify-between px-4 lg:px-6 pt-3 pb-2 lg:py-3">
       <div class="flex items-center gap-2">
-        <div class="w-8 h-8 rounded-full bg-brass-500 flex items-center justify-center font-display font-bold text-white text-sm">AM</div>
+        <img src="icon-192.png" alt="" class="w-9 h-9 rounded-lg bg-white shrink-0" style="object-fit:contain">
         <div class="leading-tight">
-          <div class="font-display uppercase tracking-wide text-[15px] font-semibold">Accommodation Manager</div>
-          <div class="text-[10px] text-mess-200 -mt-0.5">Officers Mess &middot; Bookings</div>
+          <div class="font-display uppercase tracking-wide text-[15px] font-semibold leading-snug">Officers Mess Accommodation Management Portal, AFA</div>
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
@@ -117,6 +116,7 @@
       </div>
     </div>
   </header>
+  <div class="shrink-0 text-right text-[9px] text-mess-400 bg-mess-50 py-1 px-3 tracking-wide">Made by Deep Gulati</div>
 
   <!-- ===================== BODY: SIDEBAR (lg+) + MAIN CONTENT =====================
        This row fills all remaining height below the header (flex-1 min-h-0
@@ -801,6 +801,7 @@ function persistBlock(bl){ const { id, ...data } = bl; return window.fsSetDoc('b
 function persistAuditEntry(entry){ const { id, ...data } = entry; return window.fsSetDoc('auditLog', id, data).catch(err=>console.error('Audit log save failed', err)); }
 
 const releasingRequestIds = new Set();
+const syncingRequestIds = new Set();
 function requestNeedsBookingRelease(req){
   if(req.bookingsReleasedAt) return false;
   const ids = req.resultingBookingIds || [];
@@ -811,41 +812,119 @@ function requestNeedsBookingRelease(req){
   if(req.status === 'pending' && req.previousStatus === 'approved') return true;
   return false;
 }
+function findGuestRequestForBooking(bookingId){
+  return (DB.guestRequests || []).find(r => (r.resultingBookingIds || []).includes(bookingId));
+}
+function linkedBookingsForRequest(req){
+  return (req.resultingBookingIds || []).map(id => DB.bookings.find(b => b.id === id)).filter(Boolean);
+}
+function allocatedRoomsFromLinkedBookings(req){
+  const bookings = linkedBookingsForRequest(req);
+  return (req.allocatedRooms || []).map(ar => {
+    const b = bookings.find(x => x.id === ar.bookingId);
+    if(!b) return ar;
+    const next = Object.assign({}, ar, {
+      startDate: b.startDate,
+      endDate: b.endDate || null,
+      startTime: b.startTime,
+      endTime: b.endTime || null,
+    });
+    const room = getRoom(b.roomId);
+    if(room) next.label = roomLabel(room);
+    if(b.status === 'cancelled') next.cancelled = true;
+    else delete next.cancelled;
+    return next;
+  });
+}
+function allocatedRoomsEquivalent(a, b){
+  const left = a || [];
+  const right = b || [];
+  if(left.length !== right.length) return false;
+  return left.every((ar, i) => {
+    const br = right[i] || {};
+    return (ar.bookingId||'') === (br.bookingId||'')
+      && !!ar.cancelled === !!br.cancelled
+      && (ar.label||'') === (br.label||'')
+      && (ar.startDate||'') === (br.startDate||'')
+      && (ar.endDate||'') === (br.endDate||'')
+      && (ar.startTime||'') === (br.startTime||'')
+      && (ar.endTime||'') === (br.endTime||'');
+  });
+}
+function guestRequestPatchFromLinkedBookings(req){
+  const bookings = linkedBookingsForRequest(req);
+  if(!bookings.length) return null;
+  const allocatedRooms = allocatedRoomsFromLinkedBookings(req);
+  const allCancelled = bookings.every(b => b.status === 'cancelled');
+  const patch = {};
+  if(!allocatedRoomsEquivalent(req.allocatedRooms, allocatedRooms)) patch.allocatedRooms = allocatedRooms;
+  if(allCancelled && req.status === 'approved'){
+    patch.status = 'cancelled';
+    patch.decidedBy = state.role;
+    patch.decidedAt = new Date().toISOString();
+    if(!req.cancellationReason) patch.cancellationReason = 'Cancelled by mess staff';
+  } else if(!allCancelled && req.status === 'cancelled' && !req.bookingsReleasedAt){
+    patch.status = 'approved';
+  }
+  if(!Object.keys(patch).length) return null;
+  return patch;
+}
+function applyGuestRequestPatch(req, patch){
+  if(!req || !req.phone || !patch) return Promise.resolve();
+  Object.assign(req, patch);
+  return updateGuestRequest(req, patch);
+}
+function syncGuestRequestFromLinkedBookings(bookingId){
+  const req = findGuestRequestForBooking(bookingId);
+  if(!req) return;
+  const patch = guestRequestPatchFromLinkedBookings(req);
+  if(!patch) return;
+  applyGuestRequestPatch(req, patch);
+}
 function reconcileGuestRequestBookings(){
   if(!dataLoaded.bookings || typeof window.fsCommitBatch !== 'function') return;
   let releasedAny = false;
   (DB.guestRequests || []).forEach(req => {
-    if(!req.phone || releasingRequestIds.has(req.id)) return;
-    if(!requestNeedsBookingRelease(req)) return;
-    releasingRequestIds.add(req.id);
-    const ops = [];
-    (req.resultingBookingIds || []).forEach(id => {
-      const b = DB.bookings.find(x => x.id === id);
-      if(!b || !isActiveBooking(b)) return;
-      b.status = 'cancelled';
-      const { id: bid, ...data } = b;
-      ops.push({ kind: 'set', path: ['bookings', bid], data });
-    });
-    const patch = {
-      bookingsReleasedAt: new Date().toISOString(),
-      allocatedRooms: [],
-    };
-    ops.push({ kind: 'update', path: ['bookingRequests', req.phone, 'items', req.id], data: patch });
-    req.bookingsReleasedAt = patch.bookingsReleasedAt;
-    req.allocatedRooms = [];
-    if(!ops.length){
-      releasingRequestIds.delete(req.id);
+    if(!req.phone || releasingRequestIds.has(req.id) || syncingRequestIds.has(req.id)) return;
+    if(requestNeedsBookingRelease(req)){
+      releasingRequestIds.add(req.id);
+      const ops = [];
+      (req.resultingBookingIds || []).forEach(id => {
+        const b = DB.bookings.find(x => x.id === id);
+        if(!b || !isActiveBooking(b)) return;
+        b.status = 'cancelled';
+        const { id: bid, ...data } = b;
+        ops.push({ kind: 'set', path: ['bookings', bid], data });
+      });
+      const patch = {
+        bookingsReleasedAt: new Date().toISOString(),
+        allocatedRooms: [],
+      };
+      ops.push({ kind: 'update', path: ['bookingRequests', req.phone, 'items', req.id], data: patch });
+      req.bookingsReleasedAt = patch.bookingsReleasedAt;
+      req.allocatedRooms = [];
+      if(!ops.length){
+        releasingRequestIds.delete(req.id);
+        return;
+      }
+      releasedAny = true;
+      window.fsCommitBatch(ops).then(() => {
+        logAudit(`released rooms for ${req.contactName} after the guest cancelled or re-edited an approved request`);
+        render();
+      }).catch(err => {
+        console.error('Release linked bookings failed', err);
+        req.bookingsReleasedAt = null;
+      }).finally(() => {
+        releasingRequestIds.delete(req.id);
+      });
       return;
     }
-    releasedAny = true;
-    window.fsCommitBatch(ops).then(() => {
-      logAudit(`released rooms for ${req.contactName} after the guest cancelled or re-edited an approved request`);
+    const patch = guestRequestPatchFromLinkedBookings(req);
+    if(!patch) return;
+    syncingRequestIds.add(req.id);
+    applyGuestRequestPatch(req, patch).finally(() => {
+      syncingRequestIds.delete(req.id);
       render();
-    }).catch(err => {
-      console.error('Release linked bookings failed', err);
-      req.bookingsReleasedAt = null;
-    }).finally(() => {
-      releasingRequestIds.delete(req.id);
     });
   });
   if(releasedAny) showToast('Guest cancelled or re-edited — linked rooms released');
@@ -906,6 +985,10 @@ const state = {
   requestAllocations: {},
   rejectingId: null,
   requestsStatusFilter: 'pending',
+  requestsSortBy: 'arrival',
+  requestsSortDir: 'desc',
+  requestsPurposeFilters: [],
+  requestsFilterOpen: false,
   expandedRequestIds: {},
   expandedMovementIds: {},
 };
@@ -931,6 +1014,12 @@ function fmtDMY2(iso){
 }
 function fmtWeekday(d){ return d.toLocaleDateString('en-GB',{weekday:'short'}); }
 function fmtLong(d){ return (typeof d==='string'?fromISO(d):d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtDateTime(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+}
 function daysBetween(aISO, bISO){ return Math.round((fromISO(bISO)-fromISO(aISO))/86400000); }
 
 /* A Living-in booking can have endDate === null — staff allot the room
@@ -2240,6 +2329,7 @@ function saveBooking(ev){
         persistBooking(sib);
       });
     }
+    syncGuestRequestFromLinkedBookings(b.id);
     syncSecondOccupant(roomId, category, sharing);
     if(wasCancelled){
       logAudit(`restored booking: ${allotText(newRoomLabel, guestName, startDate, endDate)}`);
@@ -2394,6 +2484,7 @@ function cancelBooking(id){
   b.status = 'cancelled';
   persistBooking(b);
   logAudit(`cancelled booking for ${b.guestName} in ${roomLabel(getRoom(b.roomId))} ${stayRangeText(b.startDate, b.endDate)}`);
+  syncGuestRequestFromLinkedBookings(id);
   closeDetailModal(); render();
   showToast('Booking cancelled');
 }
@@ -2412,6 +2503,7 @@ function restoreBooking(id){
   b.status = 'confirmed';
   persistBooking(b);
   logAudit(`restored booking: ${allotText(roomLabel(getRoom(b.roomId)), b.guestName, b.startDate, b.endDate)}`);
+  syncGuestRequestFromLinkedBookings(id);
   render();
   openDetailModal(id);
   showToast('Booking restored');
@@ -2554,8 +2646,6 @@ function openWaModal(bookingId){
 
 Your Accommodation booking is confirmed at Officers' Mess, Air Force Academy as per details given below:-
 
-${b.guestName}
-
 - Room no- ${roomLabel(room)} (${catShort})
 - Arr Date - ${fmtDMY2(b.startDate)} & ${formatTimeHrs(b.startTime, DEFAULT_CHECKIN_TIME)}
 ${depLine}
@@ -2638,9 +2728,10 @@ const REQUEST_STATUS_META = {
   cancelled: { label:'Cancelled',      color:'#7A8699', bg:'#EEF0F3' },
 };
 function requestSpan(req){
-  const starts = req.rooms.map(r=>r.startDate).sort();
-  const ends = req.rooms.map(r=>r.endDate).sort();
-  return { start: starts[0], end: ends[ends.length-1] };
+  const rooms = req.rooms || [];
+  const starts = rooms.map(r=>r.startDate).filter(Boolean).sort();
+  const ends = rooms.map(r=>r.endDate).filter(Boolean).sort();
+  return { start: starts[0] || '', end: ends.length ? ends[ends.length-1] : null };
 }
 
 /* =========================================================================
@@ -2892,12 +2983,61 @@ function confirmReject(reqId){
 }
 
 const REQUESTS_STATUS_FILTERS = ['pending','approved','rejected','cancelled'];
-function setRequestsStatusFilter(k){ state.requestsStatusFilter = k; render(); }
+const REQUESTS_PURPOSE_FILTERS = Object.keys(CATEGORY_META).filter(k => k !== 'VIP');
+function setRequestsStatusFilter(k){
+  state.requestsStatusFilter = k;
+  const allowed = requestsSortOptionsFor(k).map(o => o.key);
+  if(!allowed.includes(state.requestsSortBy)) state.requestsSortBy = 'arrival';
+  render();
+}
+function requestsSortOptionsFor(status){
+  const opts = [
+    { key:'arrival',   label:'Arrival' },
+    { key:'departure', label:'Departure' },
+    { key:'submitted', label:'Requested' },
+  ];
+  if(status==='approved') opts.push({ key:'decided', label:'Approved Date' });
+  if(status==='rejected') opts.push({ key:'decided', label:'Rejected Date' });
+  if(status==='cancelled') opts.push({ key:'decided', label:'Cancelled Date' });
+  return opts;
+}
+function setRequestsSortBy(k){ state.requestsSortBy = k; render(); }
+function toggleRequestsSortDir(){
+  state.requestsSortDir = state.requestsSortDir === 'desc' ? 'asc' : 'desc';
+  render();
+}
+function toggleRequestsPurposeFilter(k){
+  const cur = state.requestsPurposeFilters || [];
+  state.requestsPurposeFilters = cur.includes(k) ? cur.filter(x => x !== k) : cur.concat(k);
+  render();
+}
+function toggleRequestsFilterMenu(ev){
+  if(ev) ev.stopPropagation();
+  state.requestsFilterOpen = !state.requestsFilterOpen;
+  render();
+}
+function clearRequestsFilters(ev){
+  if(ev) ev.stopPropagation();
+  state.requestsPurposeFilters = [];
+  render();
+}
 function toggleRequestExpanded(id){ state.expandedRequestIds[id] = !state.expandedRequestIds[id]; render(); }
+function requestSortValue(req, key){
+  const span = requestSpan(req);
+  if(key==='arrival') return span.start || '';
+  if(key==='departure') return span.end || '9999-12-31';
+  if(key==='decided') return req.decidedAt || '';
+  return req.createdAt || '';
+}
+function renderFilterChip(onclick, active, label, color){
+  const c = color || '#122d5e';
+  return `<button onclick="${onclick}" class="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border"
+    style="${active?`background:${c};color:white;border-color:${c}`:`color:${c};border-color:${c}55;background:white`}">${label}</button>`;
+}
 /* Read-only summary shown in place of the allocation panel/actions once a
    request is no longer pending — what was decided, by whom, and when. */
 function renderDecisionSummary(req){
-  const decidedDate = req.decidedAt ? fmtLong(req.decidedAt.slice(0,10)) : '—';
+  const decidedDate = req.decidedAt ? fmtDateTime(req.decidedAt) : '—';
   if(req.status==='approved'){
     /* Always read the booking's CURRENT status/dates from DB.bookings here,
        rather than anything cached on the request — DB.bookings is this
@@ -2936,8 +3076,8 @@ function renderDecisionSummary(req){
   }
   if(req.status==='cancelled'){
     // Guests cancel their own pending/approved requests from the guest
-    // portal directly — there is no admin decidedBy for that path.
-    return `<div class="text-[11px] text-mess-600 mt-2 border-t border-mess-100 pt-2">Cancelled${req.decidedBy ? ' by ' + req.decidedBy : ' by the guest'}${req.cancellationReason ? `<br><span class="text-mess-400">Reason:</span> ${escapeHtml(req.cancellationReason)}` : ''}</div>`;
+    // portal; staff cancelling an allotted booking also lands here.
+    return `<div class="text-[11px] text-mess-600 mt-2 border-t border-mess-100 pt-2">Cancelled${req.decidedBy ? ' by ' + req.decidedBy : ' by the guest'}${req.decidedAt ? ' on ' + decidedDate : ''}${req.cancellationReason ? `<br><span class="text-mess-400">Reason:</span> ${escapeHtml(req.cancellationReason)}` : ''}</div>`;
   }
   return '';
 }
@@ -2948,11 +3088,18 @@ function renderRequests(){
   const counts = {};
   REQUESTS_STATUS_FILTERS.forEach(k => counts[k] = all.filter(r=>r.status===k).length);
 
-  const filtered = all.filter(r=>r.status===filter).sort((a,b)=>{
-    // Pending: oldest first, first-come-first-served. Decided ones: most
-    // recent decision first, so the freshest outcomes surface on top.
-    if(filter==='pending') return (a.createdAt||'').localeCompare(b.createdAt||'');
-    return (b.decidedAt||b.createdAt||'').localeCompare(a.decidedAt||a.createdAt||'');
+  const purposeFilters = state.requestsPurposeFilters || [];
+  const sortBy = state.requestsSortBy || 'arrival';
+  const sortDir = state.requestsSortDir || 'desc';
+
+  let filtered = all.filter(r=>r.status===filter);
+  if(purposeFilters.length) filtered = filtered.filter(r => purposeFilters.includes(r.purpose));
+  filtered = filtered.slice().sort((a,b)=>{
+    const av = requestSortValue(a, sortBy);
+    const bv = requestSortValue(b, sortBy);
+    const c = (av||'').localeCompare(bv||'');
+    if(c !== 0) return sortDir === 'asc' ? c : -c;
+    return (b.createdAt||'').localeCompare(a.createdAt||'');
   });
 
   const cards = filtered.map(req=>{
@@ -2963,10 +3110,10 @@ function renderRequests(){
     const statusMeta = REQUEST_STATUS_META[req.status];
     const expanded = !!state.expandedRequestIds[req.id];
 
-    const roomsHtml = req.rooms.map((r,i)=>`
+    const roomsHtml = (req.rooms||[]).map((r,i)=>`
       <div class="bg-mess-50 rounded-lg px-3 py-2 mb-1.5">
         <div class="text-[11px] font-semibold text-mess-700">Room ${i+1} request</div>
-        <div class="text-[11px] text-mess-600 mt-0.5">${fmtShort(r.startDate)} ${r.startTime||''} &rarr; ${fmtShort(r.endDate)} ${r.endTime||''}</div>
+        <div class="text-[11px] text-mess-600 mt-0.5">${fmtShort(r.startDate)} ${r.startTime||''} &rarr; ${r.endDate ? fmtShort(r.endDate) + ' ' + (r.endTime||'') : 'Open-ended (living-in)'}</div>
         <div class="text-[11px] text-mess-600 mt-0.5">${r.adults} adult${r.adults===1?'':'s'}${r.children && r.children.length ? ', ' + r.children.length + ' child' + (r.children.length===1?'':'ren') + ' (age ' + r.children.map(c=>c.age===0?'<1':c.age).join(', ') + ')' : ''}</div>
         ${r.extraBedding ? `<div class="text-[10px] text-brass-700 mt-0.5">+ Extra bedding requested</div>` : ''}
         ${isPending ? renderAllocationPanel(req, i, r) : ''}
@@ -3008,6 +3155,16 @@ function renderRequests(){
       `
     );
 
+    const timelineBits = [];
+    if(req.createdAt) timelineBits.push('Requested ' + fmtDateTime(req.createdAt));
+    if(isPending && req.editedAt) timelineBits.push('Last edited ' + fmtDateTime(req.editedAt));
+    if(req.status==='approved' && req.decidedAt) timelineBits.push('Approved ' + fmtDateTime(req.decidedAt));
+    if(req.status==='rejected' && req.decidedAt) timelineBits.push('Rejected ' + fmtDateTime(req.decidedAt));
+    if(req.status==='cancelled' && req.decidedAt) timelineBits.push('Cancelled ' + fmtDateTime(req.decidedAt));
+    const submittedLine = timelineBits.length
+      ? `<div class="text-[10px] text-mess-400 mt-0.5">${timelineBits.join(' · ')}</div>`
+      : '';
+
     return `
     <div class="bg-white border border-mess-100 rounded-xl p-3.5 mb-3">
       <div onclick="toggleRequestExpanded('${req.id}')" class="cursor-pointer">
@@ -3017,7 +3174,8 @@ function renderRequests(){
           ${isPending && expanded ? `<span class="text-[10px] text-mess-500 ml-auto">${allocatedCount}/${req.rooms.length} allocated</span>` : ''}
         </div>
         <div class="text-sm font-semibold text-mess-900">${escapeHtml(req.contactName)}</div>
-        <div class="text-[11px] text-mess-500">${formatPhoneDisplay(req.phone)} &middot; ${purposeLabel} &middot; ${fmtShort(span.start)} – ${fmtShort(span.end)} &middot; ${req.rooms.length} room${req.rooms.length===1?'':'s'}</div>
+        <div class="text-[11px] text-mess-500">${formatPhoneDisplay(req.phone)} &middot; ${purposeLabel} &middot; ${span.start ? fmtShort(span.start) : '—'} – ${fmtEndDateShort(span.end)} &middot; ${req.rooms.length} room${req.rooms.length===1?'':'s'}</div>
+        ${submittedLine}
       </div>
       ${expanded ? `
         <div class="mt-2 pt-2 border-t border-mess-100">
@@ -3026,13 +3184,24 @@ function renderRequests(){
           ${actionsHtml}
         </div>` : ''}
     </div>`;
-  }).join('') || `<div class="text-center text-sm text-mess-400 py-10">No ${filter} requests.</div>`;
+  }).join('') || `<div class="text-center text-sm text-mess-400 py-10">No ${filter} requests${purposeFilters.length ? ' for these filters' : ''}.</div>`;
 
   const chips = REQUESTS_STATUS_FILTERS.map(k=>{
-    const active = filter===k;
     const color = REQUEST_STATUS_META[k].color;
-    return `<button onclick="setRequestsStatusFilter('${k}')" class="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border"
-      style="${active?`background:${color};color:white;border-color:${color}`:`color:${color};border-color:${color}55;background:white`}">${REQUEST_STATUS_META[k].label} (${counts[k]})</button>`;
+    return renderFilterChip(`setRequestsStatusFilter('${k}')`, filter===k, `${REQUEST_STATUS_META[k].label} (${counts[k]})`, color);
+  }).join('');
+
+  const sortOptionsHtml = requestsSortOptionsFor(filter).map(opt =>
+    `<option value="${opt.key}" ${sortBy===opt.key?'selected':''}>${opt.label}</option>`
+  ).join('');
+  const filterCount = purposeFilters.length;
+  const filterBtnLabel = filterCount ? `Purpose of Visit (${filterCount})` : 'Purpose of Visit';
+  const latestFirst = sortDir !== 'asc';
+  const purposeBtns = REQUESTS_PURPOSE_FILTERS.map(k => {
+    const active = purposeFilters.includes(k);
+    const color = CATEGORY_META[k].color;
+    return `<button type="button" onclick="toggleRequestsPurposeFilter('${k}')" class="px-2.5 py-1 rounded-full text-[11px] font-medium border"
+      style="${active?`background:${color};color:white;border-color:${color}`:`color:${color};border-color:${color}55;background:white`}">${CATEGORY_META[k].label}</button>`;
   }).join('');
 
   return `
@@ -3044,7 +3213,24 @@ function renderRequests(){
       </div>
       <button onclick="render()" class="text-[11px] font-semibold text-mess-600 border border-mess-200 rounded-full px-3 py-1">Refresh</button>
     </div>
-    <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-1">${chips}</div>
+    <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-1 mb-2">${chips}</div>
+    <div class="relative flex gap-2">
+      <div class="flex flex-1 min-w-0">
+        <select aria-label="Sort requests" onchange="setRequestsSortBy(this.value)" class="flex-1 min-w-0 border border-mess-200 px-2 py-1.5 text-[11px] font-medium text-mess-800 bg-white" style="border-radius:0.5rem 0 0 0.5rem;border-right:0">
+          ${sortOptionsHtml}
+        </select>
+        <button type="button" onclick="toggleRequestsSortDir()" title="${latestFirst ? 'Latest first — tap for earliest first' : 'Earliest first — tap for latest first'}" aria-label="${latestFirst ? 'Latest first' : 'Earliest first'}" class="shrink-0 border border-mess-200 bg-white text-mess-800 text-sm font-semibold" style="width:2.25rem;border-radius:0 0.5rem 0.5rem 0">${latestFirst ? '↓' : '↑'}</button>
+      </div>
+      <div class="relative flex-1 min-w-0">
+        <button type="button" onclick="toggleRequestsFilterMenu(event)" title="${filterBtnLabel}" class="w-full border rounded-lg px-2 py-1.5 text-[11px] font-medium text-left truncate ${filterCount?'border-mess-700 bg-mess-50 text-mess-800':'border-mess-200 bg-white text-mess-800'}">${filterBtnLabel}</button>
+        ${state.requestsFilterOpen ? `
+        <div onclick="event.stopPropagation()" class="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-mess-200 rounded-xl p-3" style="box-shadow:0 10px 24px rgba(18,45,94,.12)">
+          <div class="text-[10px] font-semibold text-mess-400 uppercase tracking-wide mb-2">Purpose of visit</div>
+          <div class="flex flex-wrap gap-1.5">${purposeBtns}</div>
+          ${filterCount ? `<button type="button" onclick="clearRequestsFilters(event)" class="text-[11px] font-semibold text-mess-600 mt-2.5">Clear</button>` : `<div class="text-[10px] text-mess-400 mt-2">Tap one or more purposes. None selected shows all.</div>`}
+        </div>` : ''}
+      </div>
+    </div>
   </div>
   <div class="px-4 lg:px-6 pb-6 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">${cards}</div>`;
 }

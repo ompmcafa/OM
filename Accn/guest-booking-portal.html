@@ -7,6 +7,11 @@
 <meta name="description" content="Request accommodation or check the status of your booking request at Officers Mess, Air Force Academy.">
 <meta name="theme-color" content="#122d5e">
 
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
@@ -19,13 +24,13 @@
   <!-- ===================== HEADER ===================== -->
   <header class="safe-top bg-mess-800 text-white shrink-0">
     <div class="flex items-center gap-2.5 px-4 pt-4 pb-3">
-      <div class="w-9 h-9 rounded-full bg-gold-400 flex items-center justify-center font-display font-bold text-white text-sm shrink-0">AM</div>
+      <img src="icon-192.png" alt="" class="w-10 h-10 rounded-lg bg-white shrink-0" style="object-fit:contain">
       <div class="leading-tight min-w-0">
-        <div class="font-display uppercase tracking-wide text-[15px] font-semibold truncate">Officers Mess, AFA</div>
-        <div class="text-[11px] text-mess-200 -mt-0.5">Accommodation booking portal for guests</div>
+        <div class="font-display uppercase tracking-wide text-[15px] font-semibold leading-snug">Officers Mess Accommodation Request Portal, AFA</div>
       </div>
     </div>
   </header>
+  <div class="text-right text-[9px] text-mess-400 bg-mess-50 py-1 px-3 tracking-wide">Made by Deep Gulati</div>
 
   <!-- ===================== APP ===================== -->
   <main id="app" class="flex-1 px-4 py-3"></main>
@@ -129,7 +134,17 @@ function toISO(d){ const x=new Date(d); return x.getFullYear()+'-'+String(x.getM
 function fromISO(iso){ const [y,m,d]=iso.split('-').map(Number); return new Date(y,m-1,d); }
 function todayISO(){ return toISO(new Date()); }
 function fmtShort(iso){ return fromISO(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
-function fmtLong(iso){ return fromISO(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtLong(iso){
+  if(!iso) return '—';
+  return fromISO(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+}
+function fmtEndShort(iso){ return iso ? fmtShort(iso) : 'Ongoing'; }
+function fmtDateTime(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+}
 
 const DEFAULT_CHECKIN_TIME = '14:00';
 const DEFAULT_CHECKOUT_TIME = '12:00';
@@ -159,11 +174,25 @@ const MAX_PENDING_PER_PHONE = 2;
 /* Overall span of a request = earliest room start to latest room end,
    across every room in it. Used for the "no overlapping pending requests" rule. */
 function requestSpan(req){
-  const starts = req.rooms.map(r=>r.startDate);
-  const ends = req.rooms.map(r=>r.endDate);
-  return { start: starts.sort()[0], end: ends.sort().slice(-1)[0] };
+  const rooms = req.rooms || [];
+  const starts = rooms.map(r=>r.startDate).filter(Boolean).sort();
+  const ends = rooms.map(r=>r.endDate).filter(Boolean).sort();
+  return { start: starts[0] || '', end: ends.length ? ends[ends.length-1] : null };
 }
-function spansOverlap(aStart, aEnd, bStart, bEnd){ return aStart <= bEnd && bStart <= aEnd; }
+function spansOverlap(aStart, aEnd, bStart, bEnd){
+  const aLast = aEnd || '9999-12-31';
+  const bLast = bEnd || '9999-12-31';
+  return aStart <= bLast && bStart <= aLast;
+}
+function isLivingInPurpose(purpose){ return purpose === 'LivingIn'; }
+function requestLooksCancelled(req){
+  if(req.status === 'cancelled') return true;
+  const rooms = req.allocatedRooms || [];
+  return req.status === 'approved' && rooms.length > 0 && rooms.every(r => r.cancelled);
+}
+function effectiveRequestStatus(req){
+  return requestLooksCancelled(req) ? 'cancelled' : req.status;
+}
 
 /* =========================================================================
    STATE
@@ -189,7 +218,7 @@ function emptyForm(){
   return {
     contactName: '',
     phone: '',
-    purpose: 'GuestFamily',
+    purpose: '',
     remarks: '',
     numRooms: 1,
     rooms: [emptyRoom()],
@@ -290,25 +319,26 @@ function canCancelApproved(span){ return span.start > todayISO(); }
    can always be adjusted; a confirmed one only up to the day before
    arrival. Past that, changes have to go through the mess reception. */
 function canEditRequest(req){
-  if(req.status==='pending') return true;
-  if(req.status==='approved') return canCancelApproved(requestSpan(req));
+  const status = effectiveRequestStatus(req);
+  if(status==='pending') return true;
+  if(status==='approved') return canCancelApproved(requestSpan(req));
   return false;
 }
 
 function renderAllocatedRooms(req, onDark){
   const rooms = req.allocatedRooms || [];
-  if(req.status !== 'approved' || !rooms.length) return '';
+  if(!rooms.length) return '';
   const titleClass = onDark ? 'text-white' : 'text-mess-900';
   const subClass = onDark ? 'text-mess-200' : 'text-mess-600';
   return rooms.map(r => `
     <div class="mb-2">
-      <div class="font-display text-lg font-semibold ${titleClass} leading-tight">${escapeHtml(r.label)}</div>
+      <div class="font-display text-lg font-semibold ${titleClass} leading-tight">${escapeHtml(r.label)}${r.cancelled ? ' <span class="text-[11px] font-semibold text-red-200">Cancelled</span>' : ''}</div>
       <div class="text-[12px] ${subClass} mt-0.5">${fmtLong(r.startDate)} ${timeOrDefault(r.startTime, DEFAULT_CHECKIN_TIME)} &rarr; ${r.endDate ? fmtLong(r.endDate) + ' ' + timeOrDefault(r.endTime, DEFAULT_CHECKOUT_TIME) : 'Open-ended (living-in)'}</div>
     </div>`).join('');
 }
 function renderReceptionContacts(req){
   const list = req.receptionContacts || [];
-  if(req.status !== 'approved' || !list.length) return '';
+  if(effectiveRequestStatus(req) !== 'approved' || !list.length) return '';
   return `
     <div class="mt-3 bg-white border border-mess-100 rounded-xl p-3">
       <div class="text-[10px] font-semibold text-mess-500 uppercase tracking-wide mb-1.5">Reception</div>
@@ -320,26 +350,29 @@ function renderReceptionContacts(req){
     </div>`;
 }
 function renderApprovedStayCard(req, withReception){
-  if(req.status !== 'approved' || !(req.allocatedRooms||[]).length) return '';
+  if(!(req.allocatedRooms||[]).length) return '';
+  const cancelled = requestLooksCancelled(req);
+  if(effectiveRequestStatus(req) !== 'approved' && !cancelled) return '';
   return `
     <div class="bg-mess-800 text-white rounded-2xl p-4 mb-3">
-      <div class="text-[10px] font-semibold uppercase tracking-wide text-brass-300 mb-2">Confirmed stay</div>
+      <div class="text-[10px] font-semibold uppercase tracking-wide ${cancelled ? 'text-red-200' : 'text-brass-300'} mb-2">${cancelled ? 'Stay cancelled' : 'Confirmed stay'}</div>
       ${renderAllocatedRooms(req, true)}
     </div>
-    ${withReception ? renderReceptionContacts(req) : ''}`;
+    ${withReception && !cancelled ? renderReceptionContacts(req) : ''}`;
 }
 
 function renderStatusResults(){
   const results = state.statusResults || [];
   const phoneLabel = formatPhoneDisplay(state._statusPhoneNormalized);
   const rows = results.map(r=>{
-    const meta = REQUEST_STATUS_META[r.status];
+    const status = effectiveRequestStatus(r);
+    const meta = REQUEST_STATUS_META[status];
     const span = requestSpan(r);
 
     let actionHtml = '';
-    if(r.status==='pending'){
+    if(status==='pending'){
       actionHtml = `<button onclick="event.stopPropagation(); startCancel('${r.id}','pending')" class="mt-2.5 w-full py-2 rounded-lg border border-red-200 text-red-600 text-[12px] font-semibold">Cancel request</button>`;
-    } else if(r.status==='approved'){
+    } else if(status==='approved'){
       if(canCancelApproved(span)){
         actionHtml = `<button onclick="event.stopPropagation(); startCancel('${r.id}','approved')" class="mt-2.5 w-full py-2 rounded-lg border border-red-200 text-red-600 text-[12px] font-semibold">Cancel booking</button>`;
       } else {
@@ -355,7 +388,7 @@ function renderStatusResults(){
       </div>
       ${approvedStay || `
         <div class="text-sm font-medium text-mess-900">${escapeHtml(r.contactName)}</div>
-        <div class="text-[12px] text-mess-500 mt-0.5">${fmtShort(span.start)} &ndash; ${fmtShort(span.end)} &middot; ${r.rooms.length} room${r.rooms.length===1?'':'s'} &middot; ${(PURPOSES.find(p=>p.key===r.purpose)||{}).label||r.purpose}</div>
+        <div class="text-[12px] text-mess-500 mt-0.5">${span.start ? fmtShort(span.start) : '—'} &ndash; ${fmtEndShort(span.end)} &middot; ${r.rooms.length} room${r.rooms.length===1?'':'s'} &middot; ${(PURPOSES.find(p=>p.key===r.purpose)||{}).label||r.purpose}</div>
       `}
       ${approvedStay ? `<div class="text-[12px] text-mess-500 mt-2">${escapeHtml(r.contactName)} &middot; ${(PURPOSES.find(p=>p.key===r.purpose)||{}).label||r.purpose}</div>` : ''}
       <div class="text-[11px] text-mess-400 mt-1">Tap to view details &rsaquo;</div>
@@ -427,7 +460,7 @@ async function confirmCancel(){
   const btn = document.getElementById('confirmCancelBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'Cancelling…'; }
   try{
-    await updateRequestDoc(req.phone, id, { status: 'cancelled', cancellationReason: trimmed });
+    await updateRequestDoc(req.phone, id, { status: 'cancelled', cancellationReason: trimmed, decidedAt: new Date().toISOString() });
   }catch(e){
     console.error('Cancel failed', e);
     window.alert('Could not cancel this request — check your connection and try again. If this keeps happening, publish the latest firestore.rules in Firebase Console.');
@@ -455,19 +488,20 @@ function renderRequestDetail(){
   if(!req){
     return `<div class="text-center text-sm text-mess-500 py-10">This request could not be found.<br><button onclick="goTo('landing')" class="mt-3 text-mess-700 font-semibold">Back to home</button></div>`;
   }
-  const meta = REQUEST_STATUS_META[req.status];
+  const status = effectiveRequestStatus(req);
+  const meta = REQUEST_STATUS_META[status];
   const span = requestSpan(req);
   const editable = canEditRequest(req);
 
   const roomsHtml = req.rooms.map((r,i)=>`
     <div class="bg-mess-50 rounded-xl p-3 mb-2">
       <div class="text-[11px] font-semibold text-mess-700 uppercase tracking-wide mb-1.5">Room ${i+1}</div>
-      <div class="text-[12px] text-mess-600">${fmtLong(r.startDate)} ${r.startTime||DEFAULT_CHECKIN_TIME} &rarr; ${fmtLong(r.endDate)} ${r.endTime||DEFAULT_CHECKOUT_TIME}</div>
+      <div class="text-[12px] text-mess-600">${fmtLong(r.startDate)} ${r.startTime||DEFAULT_CHECKIN_TIME} &rarr; ${r.endDate ? fmtLong(r.endDate) + ' ' + (r.endTime||DEFAULT_CHECKOUT_TIME) : 'Open-ended (living-in)'}</div>
       <div class="text-[12px] text-mess-600 mt-1">${r.adults} adult${r.adults===1?'':'s'}${r.children.length? ', ' + r.children.length + ' child' + (r.children.length===1?'':'ren') + ' (age ' + r.children.map(c=>c.age).join(', ') + ')' : ''}</div>
       ${r.extraBedding ? `<div class="text-[11px] text-gold-700 mt-1">+ Extra bedding requested</div>` : ''}
     </div>`).join('');
 
-  const approved = req.status === 'approved' && (req.allocatedRooms||[]).length;
+  const stayCard = (req.allocatedRooms||[]).length ? renderApprovedStayCard(req, true) : '';
   return `
   <div>
     <button onclick="goTo('statusResults')" class="text-sm text-mess-500 mb-4">&larr; Back to my requests</button>
@@ -475,21 +509,21 @@ function renderRequestDetail(){
     <div class="mb-1.5">
       <span class="text-[9px] font-semibold px-2 py-1 rounded-full" style="background:${meta.bg};color:${meta.color}">${meta.label}</span>
     </div>
-    ${approved ? renderApprovedStayCard(req, true) : ''}
-    <div class="font-display ${approved ? 'text-base mt-3' : 'text-xl'} font-semibold text-mess-900 mb-1">${escapeHtml(req.contactName)}</div>
-    <div class="text-sm text-mess-500 ${approved ? 'mb-3' : 'mb-4'}">${formatPhoneDisplay(req.phone)} &middot; ${(PURPOSES.find(p=>p.key===req.purpose)||{}).label||req.purpose}</div>
+    ${stayCard}
+    <div class="font-display ${stayCard ? 'text-base mt-3' : 'text-xl'} font-semibold text-mess-900 mb-1">${escapeHtml(req.contactName)}</div>
+    <div class="text-sm text-mess-500 ${stayCard ? 'mb-3' : 'mb-4'}">${formatPhoneDisplay(req.phone)} &middot; ${(PURPOSES.find(p=>p.key===req.purpose)||{}).label||req.purpose}</div>
 
-    ${approved ? `<div class="text-[10px] font-semibold text-mess-400 uppercase tracking-wide mb-1.5">What you requested</div>` : ''}
+    ${stayCard ? `<div class="text-[10px] font-semibold text-mess-400 uppercase tracking-wide mb-1.5">What you requested</div>` : ''}
     ${roomsHtml}
     ${req.remarks ? `<div class="bg-white border border-mess-100 rounded-xl p-3 mb-2"><div class="text-[11px] text-mess-400 mb-0.5">Remarks</div><div class="text-[12px] text-mess-700">${escapeHtml(req.remarks)}</div></div>` : ''}
 
     <div class="flex gap-2 mt-4">
       ${editable ? `<button onclick="editRequest('${req.id}')" class="flex-1 py-3 rounded-xl border border-mess-300 text-mess-700 text-sm font-semibold">Edit</button>` : ''}
-      ${(req.status==='pending' || (req.status==='approved' && canCancelApproved(span))) ? `<button onclick="startCancel('${req.id}','${req.status}')" class="flex-1 py-3 rounded-xl border border-red-200 text-red-600 text-sm font-semibold">Cancel</button>` : ''}
+      ${(status==='pending' || (status==='approved' && canCancelApproved(span))) ? `<button onclick="startCancel('${req.id}','${req.status}')" class="flex-1 py-3 rounded-xl border border-red-200 text-red-600 text-sm font-semibold">Cancel</button>` : ''}
     </div>
-    ${!editable && req.status==='approved' ? `<div class="text-[11px] text-mess-400 mt-2 text-center">Too close to arrival to edit or cancel here — please contact the mess reception directly.</div>` : ''}
-    ${req.status==='rejected' && req.rejectionReason ? `<div class="bg-red-50 border border-red-100 rounded-xl p-3 mt-4"><div class="text-[11px] text-red-400 mb-0.5">Reason for rejection</div><div class="text-[12px] text-red-700">${escapeHtml(req.rejectionReason)}</div></div>` : ''}
-    ${req.status==='cancelled' && req.cancellationReason ? `<div class="bg-mess-50 border border-mess-100 rounded-xl p-3 mt-4"><div class="text-[11px] text-mess-400 mb-0.5">Reason for cancellation</div><div class="text-[12px] text-mess-700">${escapeHtml(req.cancellationReason)}</div></div>` : ''}
+    ${!editable && status==='approved' ? `<div class="text-[11px] text-mess-400 mt-2 text-center">Too close to arrival to edit or cancel here — please contact the mess reception directly.</div>` : ''}
+    ${status==='rejected' && req.rejectionReason ? `<div class="bg-red-50 border border-red-100 rounded-xl p-3 mt-4"><div class="text-[11px] text-red-400 mb-0.5">Reason for rejection</div><div class="text-[12px] text-mess-700">${escapeHtml(req.rejectionReason)}</div></div>` : ''}
+    ${status==='cancelled' && req.cancellationReason ? `<div class="bg-mess-50 border border-mess-100 rounded-xl p-3 mt-4"><div class="text-[11px] text-mess-400 mb-0.5">Reason for cancellation</div><div class="text-[12px] text-mess-700">${escapeHtml(req.cancellationReason)}</div></div>` : ''}
   </div>`;
 }
 /* Loads an existing request back into the form for editing. Reuses the
@@ -648,8 +682,16 @@ function updateField(path, value){
   const lastKey = parts[parts.length-1];
   obj[lastKey] = value;
 }
+function setPurpose(value){
+  state.form.purpose = value;
+  if(isLivingInPurpose(value)){
+    state.form.rooms.forEach(r => { r.endDate = ''; r.endTime = ''; });
+  }
+  render();
+}
 
 function renderRoomCard(room, idx){
+  const livingIn = isLivingInPurpose(state.form.purpose);
   return `
   <div class="bg-white rounded-2xl border border-mess-100 p-3 mb-2">
     <div class="flex items-center justify-between mb-2">
@@ -658,33 +700,35 @@ function renderRoomCard(room, idx){
     </div>
 
     <div class="mb-2">
-      <label for="room${idx}Start" class="text-[11px] font-medium text-mess-600 mb-1 block">Arrival</label>
+      <label for="room${idx}Start" class="text-[11px] font-medium text-mess-600 mb-1 block">Arrival <span class="text-red-600">*</span></label>
       <div class="flex gap-2 mb-0.5">
         <div class="flex-1 min-w-0 text-[10px] text-mess-400 px-0.5">Date</div>
         <div class="w-28 shrink-0 text-[10px] text-mess-400 px-0.5">Time</div>
       </div>
       <div class="flex gap-2">
-        <input id="room${idx}Start" type="date" value="${room.startDate}" min="${todayISO()}" onchange="updateField('rooms.${idx}.startDate', this.value); openTimePicker('room${idx}StartTime')" class="flex-1 min-w-0 border ${state.fieldErrors['room.'+idx+'.startDate']?'field-error':'border-mess-200'} rounded-lg px-2 py-1.5 text-sm">
-        <input id="room${idx}StartTime" type="time" value="${room.startTime}" onchange="updateField('rooms.${idx}.startTime', this.value)" class="w-28 shrink-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm">
+        <input id="room${idx}Start" type="date" required value="${room.startDate}" min="${todayISO()}" onchange="updateField('rooms.${idx}.startDate', this.value); openTimePicker('room${idx}StartTime')" class="flex-1 min-w-0 border ${state.fieldErrors['room.'+idx+'.startDate']?'field-error':'border-mess-200'} rounded-lg px-2 py-1.5 text-sm">
+        <input id="room${idx}StartTime" type="time" required value="${room.startTime}" onchange="updateField('rooms.${idx}.startTime', this.value)" class="w-28 shrink-0 border ${state.fieldErrors['room.'+idx+'.startTime']?'field-error':'border-mess-200'} rounded-lg px-2 py-1.5 text-sm">
       </div>
       ${state.fieldErrors['room.'+idx+'.startDate'] ? `<div class="field-error-msg">${state.fieldErrors['room.'+idx+'.startDate']}</div>` : ''}
+      ${state.fieldErrors['room.'+idx+'.startTime'] ? `<div class="field-error-msg">${state.fieldErrors['room.'+idx+'.startTime']}</div>` : ''}
     </div>
 
     <div class="mb-2">
-      <label for="room${idx}End" class="text-[11px] font-medium text-mess-600 mb-1 block">Departure</label>
+      <label for="room${idx}End" class="text-[11px] font-medium text-mess-600 mb-1 block">Departure ${livingIn ? '<span class="text-mess-400 font-normal">(not required for living-in)</span>' : '<span class="text-red-600">*</span>'}</label>
       <div class="flex gap-2 mb-0.5">
         <div class="flex-1 min-w-0 text-[10px] text-mess-400 px-0.5">Date</div>
         <div class="w-28 shrink-0 text-[10px] text-mess-400 px-0.5">Time</div>
       </div>
       <div class="flex gap-2">
-        <input id="room${idx}End" type="date" value="${room.endDate}" min="${room.startDate||todayISO()}" onchange="updateField('rooms.${idx}.endDate', this.value); openTimePicker('room${idx}EndTime')" class="flex-1 min-w-0 border ${state.fieldErrors['room.'+idx+'.endDate']?'field-error':'border-mess-200'} rounded-lg px-2 py-1.5 text-sm">
-        <input id="room${idx}EndTime" type="time" value="${room.endTime}" onchange="updateField('rooms.${idx}.endTime', this.value)" class="w-28 shrink-0 border border-mess-200 rounded-lg px-2 py-1.5 text-sm">
+        <input id="room${idx}End" type="date" value="${room.endDate}" min="${room.startDate||todayISO()}" ${livingIn?'disabled':''} onchange="updateField('rooms.${idx}.endDate', this.value); openTimePicker('room${idx}EndTime')" class="flex-1 min-w-0 border ${state.fieldErrors['room.'+idx+'.endDate']?'field-error':'border-mess-200'} rounded-lg px-2 py-1.5 text-sm ${livingIn?'bg-mess-50 text-mess-400':''}">
+        <input id="room${idx}EndTime" type="time" value="${room.endTime}" ${livingIn?'disabled':''} onchange="updateField('rooms.${idx}.endTime', this.value)" class="w-28 shrink-0 border ${state.fieldErrors['room.'+idx+'.endTime']?'field-error':'border-mess-200'} rounded-lg px-2 py-1.5 text-sm ${livingIn?'bg-mess-50 text-mess-400':''}">
       </div>
       ${state.fieldErrors['room.'+idx+'.endDate'] ? `<div class="field-error-msg">${state.fieldErrors['room.'+idx+'.endDate']}</div>` : ''}
+      ${state.fieldErrors['room.'+idx+'.endTime'] ? `<div class="field-error-msg">${state.fieldErrors['room.'+idx+'.endTime']}</div>` : ''}
     </div>
 
     <div class="mb-2">
-      <div class="text-[11px] font-medium text-mess-600 mb-1">Number of adults</div>
+      <div class="text-[11px] font-medium text-mess-600 mb-1">Number of adults <span class="text-red-600">*</span></div>
       <div class="flex items-center gap-2 border border-mess-200 rounded-lg px-1.5 py-1 bg-mess-50/40 w-32">
         <button type="button" onclick="adjustAdults(${idx}, -1)" class="stepper-btn rounded-md bg-white border border-mess-200 text-mess-700">&minus;</button>
         <div class="flex-1 text-center text-sm font-mono-num font-semibold text-mess-900">${room.adults}</div>
@@ -756,16 +800,18 @@ function renderRequestForm(){
     ${Object.keys(state.fieldErrors).length ? `<div class="text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl px-3 py-2 mb-2">Please fix the fields highlighted below.</div>` : ''}
 
     <div class="bg-white rounded-2xl border border-mess-100 p-3 mb-2">
-      <label for="contactNameInput" class="text-xs font-medium text-mess-600">Your name</label>
+      <label for="contactNameInput" class="text-xs font-medium text-mess-600">Your name <span class="text-red-600">*</span></label>
       <input id="contactNameInput" value="${escapeHtml(f.contactName)}" maxlength="60" oninput="updateField('contactName', this.value)" placeholder="Contact person's full name" class="w-full mt-1 border ${state.fieldErrors['contactName']?'field-error':'border-mess-200'} rounded-lg px-3 py-2 text-sm">
       ${state.fieldErrors['contactName'] ? `<div class="field-error-msg">${state.fieldErrors['contactName']}</div>` : ''}
 
       <div class="grid grid-cols-2 gap-2 mt-2">
         <div>
-          <label for="purposeSelect" class="text-xs font-medium text-mess-600 block">Purpose of visit</label>
-          <select id="purposeSelect" onchange="updateField('purpose', this.value)" class="w-full mt-1 border border-mess-200 rounded-lg px-2 py-2 text-sm bg-white">
+          <label for="purposeSelect" class="text-xs font-medium text-mess-600 block">Purpose of visit <span class="text-red-600">*</span></label>
+          <select id="purposeSelect" onchange="setPurpose(this.value)" class="w-full mt-1 border ${state.fieldErrors['purpose']?'field-error':'border-mess-200'} rounded-lg px-2 py-2 text-sm bg-white">
+            <option value="" ${!f.purpose?'selected':''}>Select purpose</option>
             ${PURPOSES.map(p=>`<option value="${p.key}" ${f.purpose===p.key?'selected':''}>${p.label}</option>`).join('')}
           </select>
+          ${state.fieldErrors['purpose'] ? `<div class="field-error-msg">${state.fieldErrors['purpose']}</div>` : ''}
         </div>
         <div>
           <label class="text-xs font-medium text-mess-600 block">Rooms required</label>
@@ -781,8 +827,8 @@ function renderRequestForm(){
     ${f.rooms.map((r,i)=>renderRoomCard(r,i)).join('')}
 
     <div class="bg-white rounded-2xl border border-mess-100 p-3 mb-3">
-      <label for="remarksInput" class="text-xs font-medium text-mess-600">Remarks (optional)</label>
-      <textarea id="remarksInput" oninput="updateField('remarks', this.value)" maxlength="300" rows="2" placeholder="e.g. early check-in, dietary needs" class="w-full mt-1 border border-mess-200 rounded-lg px-3 py-2 text-sm">${escapeHtml(f.remarks)}</textarea>
+      <label for="remarksInput" class="text-xs font-medium text-mess-600">Remarks</label>
+      <textarea id="remarksInput" oninput="updateField('remarks', this.value)" maxlength="300" rows="3" placeholder="Detailed purpose for TD (section / unit / course etc.); e.g. early check-in or dietary preferences" class="w-full mt-1 border border-mess-200 rounded-lg px-3 py-2 text-sm">${escapeHtml(f.remarks)}</textarea>
     </div>
 
     <button id="submitBtn" onclick="reviewRequest()" class="w-full py-3 rounded-xl bg-mess-800 text-white text-sm font-semibold">${editing ? 'Review changes' : 'Review request'}</button>
@@ -802,8 +848,10 @@ function renderRequestForm(){
 function validateForm(){
   const f = state.form;
   const fieldErrors = {};
+  const livingIn = isLivingInPurpose(f.purpose);
 
   if(!f.contactName.trim()) fieldErrors['contactName'] = 'Enter your name.';
+  if(!f.purpose) fieldErrors['purpose'] = 'Select the purpose of visit.';
 
   const phoneCheck = normalizePhone(f.phone);
   if(!phoneCheck.ok) fieldErrors['phone'] = phoneCheck.reason;
@@ -811,9 +859,13 @@ function validateForm(){
   f.rooms.forEach((r, i)=>{
     if(!r.startDate) fieldErrors[`room.${i}.startDate`] = 'Select an arrival date.';
     else if(r.startDate < todayISO()) fieldErrors[`room.${i}.startDate`] = 'Cannot be in the past.';
+    if(!r.startTime || !/^\d{2}:\d{2}$/.test(r.startTime)) fieldErrors[`room.${i}.startTime`] = 'Select an arrival time.';
 
-    if(!r.endDate) fieldErrors[`room.${i}.endDate`] = 'Select a departure date.';
-    else if(r.startDate && r.endDate < r.startDate) fieldErrors[`room.${i}.endDate`] = 'Cannot be before arrival.';
+    if(!livingIn){
+      if(!r.endDate) fieldErrors[`room.${i}.endDate`] = 'Select a departure date.';
+      else if(r.startDate && r.endDate < r.startDate) fieldErrors[`room.${i}.endDate`] = 'Cannot be before arrival.';
+      if(!r.endTime || !/^\d{2}:\d{2}$/.test(r.endTime)) fieldErrors[`room.${i}.endTime`] = 'Select a departure time.';
+    }
 
     if((parseInt(r.adults,10)||0) < 1) fieldErrors[`room.${i}.adults`] = 'At least one adult is required.';
     else if((parseInt(r.adults,10)||0) > 3) fieldErrors[`room.${i}.adults`] = 'Maximum 3 adults per room — please add another room instead.';
@@ -836,7 +888,7 @@ function renderRequestReview(){
   const roomsHtml = f.rooms.map((r,i)=>`
     <div class="bg-mess-50 rounded-xl p-3 mb-2">
       <div class="text-[11px] font-semibold text-mess-700 uppercase tracking-wide mb-1.5">Room ${i+1}</div>
-      <div class="text-[12px] text-mess-600">${fmtLong(r.startDate)} ${timeOrDefault(r.startTime,DEFAULT_CHECKIN_TIME)} &rarr; ${fmtLong(r.endDate)} ${timeOrDefault(r.endTime,DEFAULT_CHECKOUT_TIME)}</div>
+      <div class="text-[12px] text-mess-600">${fmtLong(r.startDate)} ${timeOrDefault(r.startTime,DEFAULT_CHECKIN_TIME)} &rarr; ${r.endDate ? fmtLong(r.endDate) + ' ' + timeOrDefault(r.endTime,DEFAULT_CHECKOUT_TIME) : 'Open-ended (living-in)'}</div>
       <div class="text-[12px] text-mess-600 mt-1">${r.adults} adult${r.adults===1?'':'s'}${r.children.length? ', ' + r.children.length + ' child' + (r.children.length===1?'':'ren') + ' (age ' + r.children.map(c=>c.age).join(', ') + ')' : ''}</div>
       ${r.extraBedding ? `<div class="text-[11px] text-gold-700 mt-1">+ Extra bedding requested</div>` : ''}
     </div>`).join('');
@@ -871,7 +923,11 @@ async function confirmSubmit(){
 
   const phone = phoneCheck.value;
   const f = state.form;
-  const newSpan = { start: f.rooms.map(r=>r.startDate).sort()[0], end: f.rooms.map(r=>r.endDate).sort().slice(-1)[0] };
+  const livingIn = isLivingInPurpose(f.purpose);
+  const newSpan = {
+    start: f.rooms.map(r=>r.startDate).filter(Boolean).sort()[0],
+    end: livingIn ? null : f.rooms.map(r=>r.endDate).filter(Boolean).sort().slice(-1)[0],
+  };
   const editingId = state.editingId;
 
   const btn = document.getElementById('confirmBtn');
@@ -905,9 +961,10 @@ async function confirmSubmit(){
     adults: parseInt(r.adults,10)||0,
     extraBedding: !!r.extraBedding,
         children: (r.children||[]).map(c=>({ age: parseInt(c.age,10)||0 })),
-    startDate: r.startDate, endDate: r.endDate,
-    startTime: timeOrDefault(r.startTime, DEFAULT_CHECKIN_TIME),
-    endTime: timeOrDefault(r.endTime, DEFAULT_CHECKOUT_TIME),
+    startDate: r.startDate,
+    endDate: livingIn ? null : r.endDate,
+    startTime: r.startTime,
+    endTime: livingIn ? null : r.endTime,
   }));
 
   try{
